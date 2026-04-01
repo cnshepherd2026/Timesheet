@@ -3,45 +3,48 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
+const ADMIN_EMAIL = "chris.shepherd@jympartnership.co.uk";
+
 type Entry = {
   id: string;
   date: string;
-  project: string;
-  description: string;
+  client: string;
   hours: number;
   user_id: string;
 };
 
-const PROJECTS = [
-  "Internal / Admin",
-  "Product Development",
-  "Client Work",
-  "Marketing",
-  "Research & Development",
-  "Meetings",
-  "Other",
-];
+type Client = {
+  id: string;
+  name: string;
+};
 
 export default function Dashboard() {
   const supabase = createClient();
   const router = useRouter();
 
-  const [user, setUser] = useState<{ email?: string } | null>(null);
+  const [user, setUser] = useState<{ email?: string; id?: string } | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [filterProject, setFilterProject] = useState("All");
+  const [filterClient, setFilterClient] = useState("All");
   const [success, setSuccess] = useState("");
 
-  // Form state
   const [form, setForm] = useState({
     date: new Date().toISOString().split("T")[0],
-    project: PROJECTS[0],
-    description: "",
-    hours: "",
+    client: "",
+    hours: "8",
   });
+
+  const fetchClients = useCallback(async () => {
+    const { data } = await supabase.from("clients").select("*").order("name");
+    setClients(data || []);
+    if (data && data.length > 0) {
+      setForm(f => ({ ...f, client: f.client || data[0].name }));
+    }
+  }, [supabase]);
 
   const fetchEntries = useCallback(async (userId: string) => {
     const { data } = await supabase
@@ -56,10 +59,11 @@ export default function Dashboard() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) { router.push("/login"); return; }
-      setUser(session.user);
+      setUser({ email: session.user.email, id: session.user.id });
+      fetchClients();
       fetchEntries(session.user.id);
     });
-  }, [supabase, router, fetchEntries]);
+  }, [supabase, router, fetchEntries, fetchClients]);
 
   async function handleSignOut() {
     await supabase.auth.signOut();
@@ -67,13 +71,13 @@ export default function Dashboard() {
   }
 
   function resetForm() {
-    setForm({ date: new Date().toISOString().split("T")[0], project: PROJECTS[0], description: "", hours: "" });
+    setForm({ date: new Date().toISOString().split("T")[0], client: clients[0]?.name || "", hours: "8" });
     setEditId(null);
     setShowForm(false);
   }
 
   function startEdit(entry: Entry) {
-    setForm({ date: entry.date, project: entry.project, description: entry.description, hours: String(entry.hours) });
+    setForm({ date: entry.date, client: entry.client, hours: String(entry.hours) });
     setEditId(entry.id);
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -84,15 +88,7 @@ export default function Dashboard() {
     setSaving(true);
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
-
-    const payload = {
-      date: form.date,
-      project: form.project,
-      description: form.description,
-      hours: parseFloat(form.hours),
-      user_id: session.user.id,
-    };
-
+    const payload = { date: form.date, client: form.client, hours: parseFloat(form.hours), user_id: session.user.id };
     if (editId) {
       await supabase.from("timesheet_entries").update(payload).eq("id", editId);
       setSuccess("Entry updated!");
@@ -100,7 +96,6 @@ export default function Dashboard() {
       await supabase.from("timesheet_entries").insert(payload);
       setSuccess("Hours logged!");
     }
-
     await fetchEntries(session.user.id);
     resetForm();
     setSaving(false);
@@ -114,8 +109,8 @@ export default function Dashboard() {
   }
 
   function exportCSV() {
-    const rows = [["Date", "Project", "Description", "Hours"]];
-    filtered.forEach(e => rows.push([e.date, e.project, e.description, String(e.hours)]));
+    const rows = [["Date", "Client", "Hours"]];
+    filtered.forEach(e => rows.push([e.date, e.client, String(e.hours)]));
     const csv = rows.map(r => r.map(v => `"${v}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -124,15 +119,11 @@ export default function Dashboard() {
     a.click(); URL.revokeObjectURL(url);
   }
 
-  const filtered = filterProject === "All" ? entries : entries.filter(e => e.project === filterProject);
+  const filtered = filterClient === "All" ? entries : entries.filter(e => e.client === filterClient);
   const totalHours = filtered.reduce((s, e) => s + e.hours, 0);
-
-  const projectTotals = PROJECTS.map(p => ({
-    name: p,
-    hours: entries.filter(e => e.project === p).reduce((s, e) => s + e.hours, 0),
-  })).filter(p => p.hours > 0);
-
-  const maxHours = Math.max(...projectTotals.map(p => p.hours), 1);
+  const clientTotals = clients.map(c => ({ name: c.name, hours: entries.filter(e => e.client === c.name).reduce((s, e) => s + e.hours, 0) })).filter(c => c.hours > 0);
+  const maxHours = Math.max(...clientTotals.map(c => c.hours), 1);
+  const isAdmin = user?.email === ADMIN_EMAIL;
 
   if (loading) {
     return (
@@ -144,7 +135,6 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen">
-      {/* Header */}
       <header className="border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -160,10 +150,12 @@ export default function Dashboard() {
           </div>
           <div className="flex items-center gap-4">
             <span className="text-xs text-muted font-mono hidden sm:block">{user?.email}</span>
-            <button
-              onClick={handleSignOut}
-              className="text-xs font-mono text-muted hover:text-accent transition-colors"
-            >
+            {isAdmin && (
+              <button onClick={() => router.push("/admin")} className="text-xs font-mono text-accent hover:text-accent/80 transition-colors">
+                Admin
+              </button>
+            )}
+            <button onClick={handleSignOut} className="text-xs font-mono text-muted hover:text-accent transition-colors">
               Sign out
             </button>
           </div>
@@ -171,7 +163,6 @@ export default function Dashboard() {
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-10 space-y-10">
-        {/* Page title + action */}
         <div className="flex items-end justify-between animate-fade-up">
           <div>
             <p className="text-xs font-mono text-muted uppercase tracking-widest mb-1">
@@ -188,86 +179,54 @@ export default function Dashboard() {
           </button>
         </div>
 
-        {/* Success toast */}
         {success && (
           <div className="animate-fade-in fixed top-6 right-6 z-50 bg-ink text-paper text-sm font-mono px-4 py-2.5 rounded-xl shadow-xl">
             ✓ {success}
           </div>
         )}
 
-        {/* Log Hours Form */}
         {showForm && (
           <div className="animate-fade-up bg-card border border-border rounded-2xl p-7 shadow-sm">
-            <h2 className="font-display text-lg font-bold mb-6">
-              {editId ? "Edit entry" : "Log hours"}
-            </h2>
-            <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <div>
-                <label className="block text-xs font-mono text-muted uppercase tracking-widest mb-2">Date</label>
-                <input
-                  type="date"
-                  required
-                  value={form.date}
-                  onChange={e => setForm({ ...form, date: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border border-border bg-paper text-ink text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-mono text-muted uppercase tracking-widest mb-2">Project</label>
-                <select
-                  value={form.project}
-                  onChange={e => setForm({ ...form, project: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border border-border bg-paper text-ink text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"
-                >
-                  {PROJECTS.map(p => <option key={p}>{p}</option>)}
-                </select>
-              </div>
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-mono text-muted uppercase tracking-widest mb-2">Description</label>
-                <input
-                  type="text"
-                  required
-                  value={form.description}
-                  onChange={e => setForm({ ...form, description: e.target.value })}
-                  placeholder="What did you work on?"
-                  className="w-full px-4 py-3 rounded-xl border border-border bg-paper text-ink placeholder-muted/50 text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-mono text-muted uppercase tracking-widest mb-2">Hours</label>
-                <input
-                  type="number"
-                  required
-                  min="0.25"
-                  max="24"
-                  step="0.25"
-                  value={form.hours}
-                  onChange={e => setForm({ ...form, hours: e.target.value })}
-                  placeholder="e.g. 2.5"
-                  className="w-full px-4 py-3 rounded-xl border border-border bg-paper text-ink placeholder-muted/50 text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"
-                />
-              </div>
-              <div className="flex items-end gap-3">
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="flex-1 py-3 bg-ink text-paper font-display font-semibold text-sm rounded-xl hover:bg-ink/90 active:scale-95 transition-all disabled:opacity-50"
-                >
-                  {saving ? "Saving…" : editId ? "Update entry" : "Save entry"}
-                </button>
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="px-4 py-3 border border-border text-muted text-sm font-body rounded-xl hover:border-ink hover:text-ink transition-all"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
+            <h2 className="font-display text-lg font-bold mb-6">{editId ? "Edit entry" : "Log hours"}</h2>
+            {clients.length === 0 ? (
+              <p className="text-sm text-muted font-body">
+                No clients set up yet. {isAdmin ? "Go to Admin to add clients." : "Ask your administrator to add clients."}
+              </p>
+            ) : (
+              <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+                <div>
+                  <label className="block text-xs font-mono text-muted uppercase tracking-widest mb-2">Date</label>
+                  <input type="date" required value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
+                    className="w-full px-4 py-3 rounded-xl border border-border bg-paper text-ink text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all" />
+                </div>
+                <div>
+                  <label className="block text-xs font-mono text-muted uppercase tracking-widest mb-2">Client</label>
+                  <select value={form.client} onChange={e => setForm({ ...form, client: e.target.value })}
+                    className="w-full px-4 py-3 rounded-xl border border-border bg-paper text-ink text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all">
+                    {clients.map(c => <option key={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-mono text-muted uppercase tracking-widest mb-2">Hours</label>
+                  <input type="number" required min="0.25" max="24" step="0.25" value={form.hours}
+                    onChange={e => setForm({ ...form, hours: e.target.value })}
+                    className="w-full px-4 py-3 rounded-xl border border-border bg-paper text-ink text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all" />
+                </div>
+                <div className="sm:col-span-3 flex items-center gap-3">
+                  <button type="submit" disabled={saving}
+                    className="px-6 py-3 bg-ink text-paper font-display font-semibold text-sm rounded-xl hover:bg-ink/90 active:scale-95 transition-all disabled:opacity-50">
+                    {saving ? "Saving…" : editId ? "Update entry" : "Save entry"}
+                  </button>
+                  <button type="button" onClick={resetForm}
+                    className="px-4 py-3 border border-border text-muted text-sm font-body rounded-xl hover:border-ink hover:text-ink transition-all">
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         )}
 
-        {/* Stats row */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 animate-fade-up delay-100">
           <div className="bg-card border border-border rounded-2xl p-5">
             <p className="text-xs font-mono text-muted uppercase tracking-widest mb-1">Total hours</p>
@@ -280,59 +239,46 @@ export default function Dashboard() {
           <div className="bg-accent/10 border border-accent/20 rounded-2xl p-5 col-span-2 sm:col-span-1">
             <p className="text-xs font-mono text-accent uppercase tracking-widest mb-1">This week</p>
             <p className="font-display text-3xl font-bold text-accent">
-              {entries
-                .filter(e => {
-                  const d = new Date(e.date);
-                  const now = new Date();
-                  const monday = new Date(now); monday.setDate(now.getDate() - now.getDay() + 1);
-                  monday.setHours(0,0,0,0);
-                  return d >= monday;
-                })
-                .reduce((s, e) => s + e.hours, 0)
-                .toFixed(1)}h
+              {entries.filter(e => {
+                const d = new Date(e.date);
+                const now = new Date();
+                const monday = new Date(now); monday.setDate(now.getDate() - now.getDay() + 1);
+                monday.setHours(0,0,0,0);
+                return d >= monday;
+              }).reduce((s, e) => s + e.hours, 0).toFixed(1)}h
             </p>
           </div>
         </div>
 
-        {/* Project breakdown bar chart */}
-        {projectTotals.length > 0 && (
+        {clientTotals.length > 0 && (
           <div className="bg-card border border-border rounded-2xl p-7 animate-fade-up delay-200">
-            <h2 className="font-display text-sm font-bold uppercase tracking-widest text-muted mb-6">Hours by project</h2>
+            <h2 className="font-display text-sm font-bold uppercase tracking-widest text-muted mb-6">Hours by client</h2>
             <div className="space-y-3">
-              {projectTotals.sort((a, b) => b.hours - a.hours).map(p => (
-                <div key={p.name} className="flex items-center gap-4">
-                  <div className="w-36 text-xs font-mono text-ink truncate shrink-0">{p.name}</div>
+              {clientTotals.sort((a, b) => b.hours - a.hours).map(c => (
+                <div key={c.name} className="flex items-center gap-4">
+                  <div className="w-40 text-xs font-mono text-ink truncate shrink-0">{c.name}</div>
                   <div className="flex-1 bg-border/40 rounded-full h-2 overflow-hidden">
-                    <div
-                      className="h-full bg-accent rounded-full transition-all duration-700"
-                      style={{ width: `${(p.hours / maxHours) * 100}%` }}
-                    />
+                    <div className="h-full bg-accent rounded-full transition-all duration-700" style={{ width: `${(c.hours / maxHours) * 100}%` }} />
                   </div>
-                  <div className="text-xs font-mono text-muted w-12 text-right">{p.hours.toFixed(1)}h</div>
+                  <div className="text-xs font-mono text-muted w-12 text-right">{c.hours.toFixed(1)}h</div>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Entries table */}
         <div className="animate-fade-up delay-300">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-display text-lg font-bold">Entries</h2>
             <div className="flex items-center gap-3">
-              <select
-                value={filterProject}
-                onChange={e => setFilterProject(e.target.value)}
-                className="text-xs font-mono px-3 py-1.5 rounded-lg border border-border bg-paper text-ink focus:outline-none focus:border-ink transition-all"
-              >
-                <option value="All">All projects</option>
-                {PROJECTS.map(p => <option key={p}>{p}</option>)}
+              <select value={filterClient} onChange={e => setFilterClient(e.target.value)}
+                className="text-xs font-mono px-3 py-1.5 rounded-lg border border-border bg-paper text-ink focus:outline-none focus:border-ink transition-all">
+                <option value="All">All clients</option>
+                {clients.map(c => <option key={c.id}>{c.name}</option>)}
               </select>
               {filtered.length > 0 && (
-                <button
-                  onClick={exportCSV}
-                  className="text-xs font-mono px-3 py-1.5 border border-border rounded-lg hover:border-ink hover:text-ink text-muted transition-all flex items-center gap-1.5"
-                >
+                <button onClick={exportCSV}
+                  className="text-xs font-mono px-3 py-1.5 border border-border rounded-lg hover:border-ink hover:text-ink text-muted transition-all flex items-center gap-1.5">
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v7M3 5l3 3 3-3M1 10h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
                   Export CSV
                 </button>
@@ -353,8 +299,7 @@ export default function Dashboard() {
                   <thead>
                     <tr className="border-b border-border">
                       <th className="text-left text-xs font-mono text-muted uppercase tracking-widest px-6 py-4">Date</th>
-                      <th className="text-left text-xs font-mono text-muted uppercase tracking-widest px-4 py-4">Project</th>
-                      <th className="text-left text-xs font-mono text-muted uppercase tracking-widest px-4 py-4">Description</th>
+                      <th className="text-left text-xs font-mono text-muted uppercase tracking-widest px-4 py-4">Client</th>
                       <th className="text-right text-xs font-mono text-muted uppercase tracking-widest px-6 py-4">Hours</th>
                       <th className="px-4 py-4"></th>
                     </tr>
@@ -363,31 +308,18 @@ export default function Dashboard() {
                     {filtered.map((entry, i) => (
                       <tr key={entry.id} className={`border-b border-border/50 hover:bg-paper/60 transition-colors ${i === filtered.length - 1 ? "border-b-0" : ""}`}>
                         <td className="px-6 py-4 text-sm font-mono text-muted whitespace-nowrap">
-                          {new Date(entry.date + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                          {new Date(entry.date + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
                         </td>
                         <td className="px-4 py-4">
-                          <span className="inline-block text-xs font-mono bg-ink/8 text-ink rounded-md px-2 py-1 whitespace-nowrap">
-                            {entry.project}
-                          </span>
+                          <span className="inline-block text-xs font-mono bg-ink/8 text-ink rounded-md px-2 py-1 whitespace-nowrap">{entry.client}</span>
                         </td>
-                        <td className="px-4 py-4 text-sm text-ink max-w-xs truncate">{entry.description}</td>
                         <td className="px-6 py-4 text-right">
                           <span className="font-display font-bold text-sm">{entry.hours}h</span>
                         </td>
                         <td className="px-4 py-4">
                           <div className="flex items-center gap-2 justify-end">
-                            <button
-                              onClick={() => startEdit(entry)}
-                              className="text-xs text-muted hover:text-ink font-mono transition-colors"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDelete(entry.id)}
-                              className="text-xs text-muted hover:text-accent font-mono transition-colors"
-                            >
-                              Delete
-                            </button>
+                            <button onClick={() => startEdit(entry)} className="text-xs text-muted hover:text-ink font-mono transition-colors">Edit</button>
+                            <button onClick={() => handleDelete(entry.id)} className="text-xs text-muted hover:text-accent font-mono transition-colors">Delete</button>
                           </div>
                         </td>
                       </tr>
