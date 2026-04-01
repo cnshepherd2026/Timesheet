@@ -1,0 +1,404 @@
+"use client";
+import { useState, useEffect, useCallback } from "react";
+import { createClient } from "@/lib/supabase";
+import { useRouter } from "next/navigation";
+
+type Entry = {
+  id: string;
+  date: string;
+  project: string;
+  description: string;
+  hours: number;
+  user_id: string;
+};
+
+const PROJECTS = [
+  "Internal / Admin",
+  "Product Development",
+  "Client Work",
+  "Marketing",
+  "Research & Development",
+  "Meetings",
+  "Other",
+];
+
+export default function Dashboard() {
+  const supabase = createClient();
+  const router = useRouter();
+
+  const [user, setUser] = useState<{ email?: string } | null>(null);
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [filterProject, setFilterProject] = useState("All");
+  const [success, setSuccess] = useState("");
+
+  // Form state
+  const [form, setForm] = useState({
+    date: new Date().toISOString().split("T")[0],
+    project: PROJECTS[0],
+    description: "",
+    hours: "",
+  });
+
+  const fetchEntries = useCallback(async (userId: string) => {
+    const { data } = await supabase
+      .from("timesheet_entries")
+      .select("*")
+      .eq("user_id", userId)
+      .order("date", { ascending: false });
+    setEntries(data || []);
+    setLoading(false);
+  }, [supabase]);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) { router.push("/login"); return; }
+      setUser(session.user);
+      fetchEntries(session.user.id);
+    });
+  }, [supabase, router, fetchEntries]);
+
+  async function handleSignOut() {
+    await supabase.auth.signOut();
+    router.push("/login");
+  }
+
+  function resetForm() {
+    setForm({ date: new Date().toISOString().split("T")[0], project: PROJECTS[0], description: "", hours: "" });
+    setEditId(null);
+    setShowForm(false);
+  }
+
+  function startEdit(entry: Entry) {
+    setForm({ date: entry.date, project: entry.project, description: entry.description, hours: String(entry.hours) });
+    setEditId(entry.id);
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const payload = {
+      date: form.date,
+      project: form.project,
+      description: form.description,
+      hours: parseFloat(form.hours),
+      user_id: session.user.id,
+    };
+
+    if (editId) {
+      await supabase.from("timesheet_entries").update(payload).eq("id", editId);
+      setSuccess("Entry updated!");
+    } else {
+      await supabase.from("timesheet_entries").insert(payload);
+      setSuccess("Hours logged!");
+    }
+
+    await fetchEntries(session.user.id);
+    resetForm();
+    setSaving(false);
+    setTimeout(() => setSuccess(""), 3000);
+  }
+
+  async function handleDelete(id: string) {
+    await supabase.from("timesheet_entries").delete().eq("id", id);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) fetchEntries(session.user.id);
+  }
+
+  function exportCSV() {
+    const rows = [["Date", "Project", "Description", "Hours"]];
+    filtered.forEach(e => rows.push([e.date, e.project, e.description, String(e.hours)]));
+    const csv = rows.map(r => r.map(v => `"${v}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url;
+    a.download = `timesheet-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  }
+
+  const filtered = filterProject === "All" ? entries : entries.filter(e => e.project === filterProject);
+  const totalHours = filtered.reduce((s, e) => s + e.hours, 0);
+
+  const projectTotals = PROJECTS.map(p => ({
+    name: p,
+    hours: entries.filter(e => e.project === p).reduce((s, e) => s + e.hours, 0),
+  })).filter(p => p.hours > 0);
+
+  const maxHours = Math.max(...projectTotals.map(p => p.hours), 1);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="font-mono text-sm text-muted animate-pulse">Loading your timesheet…</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen">
+      {/* Header */}
+      <header className="border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-10">
+        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-7 h-7 bg-ink rounded flex items-center justify-center shrink-0">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <rect x="2" y="2" width="5" height="5" fill="#F5F2EB" />
+                <rect x="9" y="2" width="5" height="5" fill="#E8572A" />
+                <rect x="2" y="9" width="5" height="5" fill="#E8572A" />
+                <rect x="9" y="9" width="5" height="5" fill="#F5F2EB" />
+              </svg>
+            </div>
+            <span className="font-display font-bold text-base">Timesheet</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="text-xs text-muted font-mono hidden sm:block">{user?.email}</span>
+            <button
+              onClick={handleSignOut}
+              className="text-xs font-mono text-muted hover:text-accent transition-colors"
+            >
+              Sign out
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-5xl mx-auto px-6 py-10 space-y-10">
+        {/* Page title + action */}
+        <div className="flex items-end justify-between animate-fade-up">
+          <div>
+            <p className="text-xs font-mono text-muted uppercase tracking-widest mb-1">
+              {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+            </p>
+            <h1 className="font-display text-4xl font-bold text-ink">Your Hours</h1>
+          </div>
+          <button
+            onClick={() => { setShowForm(!showForm); setEditId(null); }}
+            className="flex items-center gap-2 px-5 py-2.5 bg-accent text-white font-display font-semibold text-sm rounded-xl hover:bg-accent/90 active:scale-95 transition-all"
+          >
+            <span className="text-lg leading-none">+</span>
+            Log hours
+          </button>
+        </div>
+
+        {/* Success toast */}
+        {success && (
+          <div className="animate-fade-in fixed top-6 right-6 z-50 bg-ink text-paper text-sm font-mono px-4 py-2.5 rounded-xl shadow-xl">
+            ✓ {success}
+          </div>
+        )}
+
+        {/* Log Hours Form */}
+        {showForm && (
+          <div className="animate-fade-up bg-card border border-border rounded-2xl p-7 shadow-sm">
+            <h2 className="font-display text-lg font-bold mb-6">
+              {editId ? "Edit entry" : "Log hours"}
+            </h2>
+            <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div>
+                <label className="block text-xs font-mono text-muted uppercase tracking-widest mb-2">Date</label>
+                <input
+                  type="date"
+                  required
+                  value={form.date}
+                  onChange={e => setForm({ ...form, date: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-border bg-paper text-ink text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-mono text-muted uppercase tracking-widest mb-2">Project</label>
+                <select
+                  value={form.project}
+                  onChange={e => setForm({ ...form, project: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-border bg-paper text-ink text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"
+                >
+                  {PROJECTS.map(p => <option key={p}>{p}</option>)}
+                </select>
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-mono text-muted uppercase tracking-widest mb-2">Description</label>
+                <input
+                  type="text"
+                  required
+                  value={form.description}
+                  onChange={e => setForm({ ...form, description: e.target.value })}
+                  placeholder="What did you work on?"
+                  className="w-full px-4 py-3 rounded-xl border border-border bg-paper text-ink placeholder-muted/50 text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-mono text-muted uppercase tracking-widest mb-2">Hours</label>
+                <input
+                  type="number"
+                  required
+                  min="0.25"
+                  max="24"
+                  step="0.25"
+                  value={form.hours}
+                  onChange={e => setForm({ ...form, hours: e.target.value })}
+                  placeholder="e.g. 2.5"
+                  className="w-full px-4 py-3 rounded-xl border border-border bg-paper text-ink placeholder-muted/50 text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"
+                />
+              </div>
+              <div className="flex items-end gap-3">
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex-1 py-3 bg-ink text-paper font-display font-semibold text-sm rounded-xl hover:bg-ink/90 active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {saving ? "Saving…" : editId ? "Update entry" : "Save entry"}
+                </button>
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="px-4 py-3 border border-border text-muted text-sm font-body rounded-xl hover:border-ink hover:text-ink transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* Stats row */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 animate-fade-up delay-100">
+          <div className="bg-card border border-border rounded-2xl p-5">
+            <p className="text-xs font-mono text-muted uppercase tracking-widest mb-1">Total hours</p>
+            <p className="font-display text-3xl font-bold">{totalHours.toFixed(1)}</p>
+          </div>
+          <div className="bg-card border border-border rounded-2xl p-5">
+            <p className="text-xs font-mono text-muted uppercase tracking-widest mb-1">Entries</p>
+            <p className="font-display text-3xl font-bold">{filtered.length}</p>
+          </div>
+          <div className="bg-accent/10 border border-accent/20 rounded-2xl p-5 col-span-2 sm:col-span-1">
+            <p className="text-xs font-mono text-accent uppercase tracking-widest mb-1">This week</p>
+            <p className="font-display text-3xl font-bold text-accent">
+              {entries
+                .filter(e => {
+                  const d = new Date(e.date);
+                  const now = new Date();
+                  const monday = new Date(now); monday.setDate(now.getDate() - now.getDay() + 1);
+                  monday.setHours(0,0,0,0);
+                  return d >= monday;
+                })
+                .reduce((s, e) => s + e.hours, 0)
+                .toFixed(1)}h
+            </p>
+          </div>
+        </div>
+
+        {/* Project breakdown bar chart */}
+        {projectTotals.length > 0 && (
+          <div className="bg-card border border-border rounded-2xl p-7 animate-fade-up delay-200">
+            <h2 className="font-display text-sm font-bold uppercase tracking-widest text-muted mb-6">Hours by project</h2>
+            <div className="space-y-3">
+              {projectTotals.sort((a, b) => b.hours - a.hours).map(p => (
+                <div key={p.name} className="flex items-center gap-4">
+                  <div className="w-36 text-xs font-mono text-ink truncate shrink-0">{p.name}</div>
+                  <div className="flex-1 bg-border/40 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="h-full bg-accent rounded-full transition-all duration-700"
+                      style={{ width: `${(p.hours / maxHours) * 100}%` }}
+                    />
+                  </div>
+                  <div className="text-xs font-mono text-muted w-12 text-right">{p.hours.toFixed(1)}h</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Entries table */}
+        <div className="animate-fade-up delay-300">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-display text-lg font-bold">Entries</h2>
+            <div className="flex items-center gap-3">
+              <select
+                value={filterProject}
+                onChange={e => setFilterProject(e.target.value)}
+                className="text-xs font-mono px-3 py-1.5 rounded-lg border border-border bg-paper text-ink focus:outline-none focus:border-ink transition-all"
+              >
+                <option value="All">All projects</option>
+                {PROJECTS.map(p => <option key={p}>{p}</option>)}
+              </select>
+              {filtered.length > 0 && (
+                <button
+                  onClick={exportCSV}
+                  className="text-xs font-mono px-3 py-1.5 border border-border rounded-lg hover:border-ink hover:text-ink text-muted transition-all flex items-center gap-1.5"
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v7M3 5l3 3 3-3M1 10h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                  Export CSV
+                </button>
+              )}
+            </div>
+          </div>
+
+          {filtered.length === 0 ? (
+            <div className="bg-card border border-border rounded-2xl p-12 text-center">
+              <div className="text-4xl mb-3">🕐</div>
+              <p className="font-display font-semibold text-ink mb-1">No entries yet</p>
+              <p className="text-sm text-muted">Log your first hours to get started.</p>
+            </div>
+          ) : (
+            <div className="bg-card border border-border rounded-2xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left text-xs font-mono text-muted uppercase tracking-widest px-6 py-4">Date</th>
+                      <th className="text-left text-xs font-mono text-muted uppercase tracking-widest px-4 py-4">Project</th>
+                      <th className="text-left text-xs font-mono text-muted uppercase tracking-widest px-4 py-4">Description</th>
+                      <th className="text-right text-xs font-mono text-muted uppercase tracking-widest px-6 py-4">Hours</th>
+                      <th className="px-4 py-4"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((entry, i) => (
+                      <tr key={entry.id} className={`border-b border-border/50 hover:bg-paper/60 transition-colors ${i === filtered.length - 1 ? "border-b-0" : ""}`}>
+                        <td className="px-6 py-4 text-sm font-mono text-muted whitespace-nowrap">
+                          {new Date(entry.date + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                        </td>
+                        <td className="px-4 py-4">
+                          <span className="inline-block text-xs font-mono bg-ink/8 text-ink rounded-md px-2 py-1 whitespace-nowrap">
+                            {entry.project}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 text-sm text-ink max-w-xs truncate">{entry.description}</td>
+                        <td className="px-6 py-4 text-right">
+                          <span className="font-display font-bold text-sm">{entry.hours}h</span>
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="flex items-center gap-2 justify-end">
+                            <button
+                              onClick={() => startEdit(entry)}
+                              className="text-xs text-muted hover:text-ink font-mono transition-colors"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDelete(entry.id)}
+                              className="text-xs text-muted hover:text-accent font-mono transition-colors"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+}
