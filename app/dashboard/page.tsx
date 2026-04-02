@@ -8,20 +8,31 @@ const ADMIN_EMAIL = "chris.shepherd@jympartnership.co.uk";
 type Entry = { id: string; date: string; client: string; hours: number; user_id: string };
 type Client = { id: string; name: string; sort_order: number };
 
-// Returns target hours for a given JS Date (0 = weekend, 7 = Friday, 8 = Mon-Thu)
+// Format a local Date as YYYY-MM-DD without UTC conversion
+function localDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+// Today's date key in local time
+function todayKey(): string {
+  return localDateKey(new Date());
+}
+
+// Returns target hours for a given JS Date (0=weekend, 7=Friday, 8=Mon-Thu)
 function targetHours(date: Date): number {
-  const day = date.getDay(); // 0=Sun,1=Mon,...,5=Fri,6=Sat
+  const day = date.getDay();
   if (day === 0 || day === 6) return 0;
   if (day === 5) return 7;
   return 8;
 }
 
 function getCalendarMonth(year: number, month: number) {
-  // Returns array of weeks, each week is array of 7 dates (Mon-Sun), nulls for padding
   const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0);
-  // Adjust so week starts Monday (JS: 0=Sun)
-  const startPad = (firstDay.getDay() + 6) % 7;
+  const startPad = (firstDay.getDay() + 6) % 7; // Mon=0
   const days: (Date | null)[] = [];
   for (let i = 0; i < startPad; i++) days.push(null);
   for (let d = 1; d <= lastDay.getDate(); d++) days.push(new Date(year, month, d));
@@ -41,13 +52,15 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(false);
   const [filterClient, setFilterClient] = useState("All");
   const [success, setSuccess] = useState("");
-  const [calMonth, setCalMonth] = useState(() => { const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() }; });
+  const [calMonth, setCalMonth] = useState(() => {
+    const n = new Date();
+    return { year: n.getFullYear(), month: n.getMonth() };
+  });
 
   const [form, setForm] = useState({
-    date: new Date().toISOString().split("T")[0],
+    date: todayKey(),
     client: "",
     hours: "8",
   });
@@ -79,13 +92,13 @@ export default function Dashboard() {
   async function handleSignOut() { await supabase.auth.signOut(); router.push("/login"); }
 
   function resetForm() {
-    setForm({ date: new Date().toISOString().split("T")[0], client: clients[0]?.name || "", hours: "8" });
-    setEditId(null); setShowForm(false);
+    setForm({ date: todayKey(), client: clients[0]?.name || "", hours: "8" });
+    setEditId(null);
   }
 
   function startEdit(entry: Entry) {
     setForm({ date: entry.date, client: entry.client, hours: String(entry.hours) });
-    setEditId(entry.id); setShowForm(true);
+    setEditId(entry.id);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -94,9 +107,16 @@ export default function Dashboard() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
     const payload = { date: form.date, client: form.client, hours: parseFloat(form.hours), user_id: session.user.id, user_email: session.user.email };
-    if (editId) { await supabase.from("timesheet_entries").update(payload).eq("id", editId); setSuccess("Entry updated!"); }
-    else { await supabase.from("timesheet_entries").insert(payload); setSuccess("Hours logged!"); }
-    await fetchEntries(session.user.id); resetForm(); setSaving(false);
+    if (editId) {
+      await supabase.from("timesheet_entries").update(payload).eq("id", editId);
+      setSuccess("Entry updated!");
+    } else {
+      await supabase.from("timesheet_entries").insert(payload);
+      setSuccess("Hours logged!");
+    }
+    await fetchEntries(session.user.id);
+    resetForm();
+    setSaving(false);
     setTimeout(() => setSuccess(""), 3000);
   }
 
@@ -107,44 +127,43 @@ export default function Dashboard() {
   }
 
   function exportCSV() {
-    const rows = [["Date", "Client", "Hours"]];
+    const rows = [["Date", "Activity", "Hours"]];
     filtered.forEach(e => rows.push([e.date, e.client, String(e.hours)]));
     const csv = rows.map(r => r.map(v => `"${v}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url;
-    a.download = `timesheet-${new Date().toISOString().split("T")[0]}.csv`;
+    a.download = `timesheet-${todayKey()}.csv`;
     a.click(); URL.revokeObjectURL(url);
   }
 
-  // Build a map of date -> total hours logged
+  // Build date -> hours map using the string key directly from DB (already YYYY-MM-DD)
   const hoursByDate: Record<string, number> = {};
   entries.forEach(e => { hoursByDate[e.date] = (hoursByDate[e.date] || 0) + e.hours; });
 
-  function getDayStatus(date: Date): "green" | "red" | "grey" | "weekend" | "future" {
-    const today = new Date(); today.setHours(0, 0, 0, 0);
+  function getDayStatus(date: Date): "green" | "red" | "weekend" | "future" {
     const target = targetHours(date);
     if (target === 0) return "weekend";
-    if (date > today) return "future";
-    const key = date.toISOString().split("T")[0];
+    const key = localDateKey(date);
+    if (key > todayKey()) return "future";
     const logged = hoursByDate[key] || 0;
-    if (logged >= target) return "green";
-    return "red";
+    return logged >= target ? "green" : "red";
   }
 
   const filtered = filterClient === "All" ? entries : entries.filter(e => e.client === filterClient);
   const totalHours = filtered.reduce((s, e) => s + e.hours, 0);
-  const clientTotals = clients.map(c => ({ name: c.name, hours: entries.filter(e => e.client === c.name).reduce((s, e) => s + e.hours, 0) })).filter(c => c.hours > 0);
+  const clientTotals = clients
+    .map(c => ({ name: c.name, hours: entries.filter(e => e.client === c.name).reduce((s, e) => s + e.hours, 0) }))
+    .filter(c => c.hours > 0);
   const maxHours = Math.max(...clientTotals.map(c => c.hours), 1);
   const isAdmin = user?.email === ADMIN_EMAIL;
 
   const calWeeks = getCalendarMonth(calMonth.year, calMonth.month);
-  const calMonthLabel = new Date(calMonth.year, calMonth.month, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+  const calMonthLabel = new Date(calMonth.year, calMonth.month, 1)
+    .toLocaleDateString("en-GB", { month: "long", year: "numeric" });
 
-  // Count green/red days in calendar month for summary
   const calDays = calWeeks.flat().filter(d => d !== null) as Date[];
-  const workDays = calDays.filter(d => targetHours(d) > 0 && d <= new Date());
-  const today = new Date(); today.setHours(23, 59, 59);
+  const workDays = calDays.filter(d => targetHours(d) > 0 && localDateKey(d) <= todayKey());
   const greenDays = workDays.filter(d => getDayStatus(d) === "green").length;
   const redDays = workDays.filter(d => getDayStatus(d) === "red").length;
 
@@ -181,64 +200,61 @@ export default function Dashboard() {
 
       <main className="max-w-5xl mx-auto px-6 py-10 space-y-10">
 
-        {/* Title + Log button */}
-        <div className="flex items-end justify-between animate-fade-up">
-          <div>
-            <p className="text-xs font-mono text-muted uppercase tracking-widest mb-1">
-              {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
-            </p>
-            <h1 className="font-display text-4xl font-bold text-ink">Your Hours</h1>
-          </div>
-          <button onClick={() => { setShowForm(!showForm); setEditId(null); }}
-            className="flex items-center gap-2 px-5 py-2.5 bg-accent text-white font-display font-semibold text-sm rounded-xl hover:bg-accent/90 active:scale-95 transition-all">
-            <span className="text-lg leading-none">+</span>Log hours
-          </button>
+        {/* Title */}
+        <div className="animate-fade-up">
+          <p className="text-xs font-mono text-muted uppercase tracking-widest mb-1">
+            {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+          </p>
+          <h1 className="font-display text-4xl font-bold text-ink">Your Hours</h1>
         </div>
 
         {success && (
           <div className="animate-fade-in fixed top-6 right-6 z-50 bg-ink text-paper text-sm font-mono px-4 py-2.5 rounded-xl shadow-xl">✓ {success}</div>
         )}
 
-        {/* Log hours form */}
-        {showForm && (
-          <div className="animate-fade-up bg-card border border-border rounded-2xl p-7 shadow-sm">
-            <h2 className="font-display text-lg font-bold mb-6">{editId ? "Edit entry" : "Log hours"}</h2>
-            {clients.length === 0 ? (
-              <p className="text-sm text-muted font-body">No activities set up yet. {isAdmin ? "Go to Admin to add some." : "Ask your administrator to add activities."}</p>
-            ) : (
-              <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-                <div>
-                  <label className="block text-xs font-mono text-muted uppercase tracking-widest mb-2">Date</label>
-                  <input type="date" required value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border border-border bg-paper text-ink text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"/>
-                </div>
-                <div>
-                  <label className="block text-xs font-mono text-muted uppercase tracking-widest mb-2">Activity</label>
-                  <select value={form.client} onChange={e => setForm({ ...form, client: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border border-border bg-paper text-ink text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all">
-                    {clients.map(c => <option key={c.id}>{c.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-mono text-muted uppercase tracking-widest mb-2">Hours</label>
-                  <input type="number" required min="0.25" max="24" step="0.25" value={form.hours}
-                    onChange={e => setForm({ ...form, hours: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border border-border bg-paper text-ink text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"/>
-                </div>
-                <div className="sm:col-span-3 flex items-center gap-3">
-                  <button type="submit" disabled={saving}
-                    className="px-6 py-3 bg-ink text-paper font-display font-semibold text-sm rounded-xl hover:bg-ink/90 active:scale-95 transition-all disabled:opacity-50">
-                    {saving ? "Saving…" : editId ? "Update entry" : "Save entry"}
-                  </button>
+        {/* ── LOG HOURS FORM — always visible ── */}
+        <div className="bg-card border border-border rounded-2xl p-7 shadow-sm animate-fade-up">
+          <h2 className="font-display text-lg font-bold mb-6">{editId ? "Edit entry" : "Log hours"}</h2>
+          {clients.length === 0 ? (
+            <p className="text-sm text-muted font-body">
+              No activities set up yet. {isAdmin ? "Go to Admin to add some." : "Ask your administrator to add activities."}
+            </p>
+          ) : (
+            <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+              <div>
+                <label className="block text-xs font-mono text-muted uppercase tracking-widest mb-2">Date</label>
+                <input type="date" required value={form.date}
+                  onChange={e => setForm({ ...form, date: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-border bg-paper text-ink text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"/>
+              </div>
+              <div>
+                <label className="block text-xs font-mono text-muted uppercase tracking-widest mb-2">Activity</label>
+                <select value={form.client} onChange={e => setForm({ ...form, client: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-border bg-paper text-ink text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all">
+                  {clients.map(c => <option key={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-mono text-muted uppercase tracking-widest mb-2">Hours</label>
+                <input type="number" required min="0.25" max="24" step="0.25" value={form.hours}
+                  onChange={e => setForm({ ...form, hours: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-border bg-paper text-ink text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"/>
+              </div>
+              <div className="sm:col-span-3 flex items-center gap-3">
+                <button type="submit" disabled={saving}
+                  className="px-6 py-3 bg-accent text-white font-display font-semibold text-sm rounded-xl hover:bg-accent/90 active:scale-95 transition-all disabled:opacity-50">
+                  {saving ? "Saving…" : editId ? "Update entry" : "Save entry"}
+                </button>
+                {editId && (
                   <button type="button" onClick={resetForm}
                     className="px-4 py-3 border border-border text-muted text-sm font-body rounded-xl hover:border-ink hover:text-ink transition-all">
-                    Cancel
+                    Cancel edit
                   </button>
-                </div>
-              </form>
-            )}
-          </div>
-        )}
+                )}
+              </div>
+            </form>
+          )}
+        </div>
 
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 animate-fade-up delay-100">
@@ -254,10 +270,11 @@ export default function Dashboard() {
             <p className="text-xs font-mono text-accent uppercase tracking-widest mb-1">This week</p>
             <p className="font-display text-3xl font-bold text-accent">
               {entries.filter(e => {
-                const d = new Date(e.date);
                 const now = new Date();
-                const monday = new Date(now); monday.setDate(now.getDate() - now.getDay() + 1); monday.setHours(0,0,0,0);
-                return d >= monday;
+                const monday = new Date(now);
+                monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+                monday.setHours(0, 0, 0, 0);
+                return e.date >= localDateKey(monday);
               }).reduce((s, e) => s + e.hours, 0).toFixed(1)}h
             </p>
           </div>
@@ -276,19 +293,20 @@ export default function Dashboard() {
                   const d = new Date(m.year, m.month - 1, 1);
                   return { year: d.getFullYear(), month: d.getMonth() };
                 })}
-                className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all text-sm"
-              >‹</button>
+                className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all">‹</button>
+              <button
+                onClick={() => { const n = new Date(); setCalMonth({ year: n.getFullYear(), month: n.getMonth() }); }}
+                className="text-xs font-mono px-3 py-1.5 rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all">Today</button>
               <button
                 onClick={() => setCalMonth(m => {
                   const d = new Date(m.year, m.month + 1, 1);
                   return { year: d.getFullYear(), month: d.getMonth() };
                 })}
-                className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all text-sm"
-              >›</button>
+                className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all">›</button>
             </div>
           </div>
 
-          {/* Day labels */}
+          {/* Day headers */}
           <div className="grid grid-cols-7 mb-2">
             {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d => (
               <div key={d} className={`text-center text-xs font-mono uppercase tracking-wider py-1 ${d === "Sat" || d === "Sun" ? "text-muted/30" : "text-muted"}`}>{d}</div>
@@ -300,24 +318,25 @@ export default function Dashboard() {
             {calWeeks.map((week, wi) => (
               <div key={wi} className="grid grid-cols-7 gap-1">
                 {week.map((date, di) => {
-                  if (!date) return <div key={di} />;
+                  if (!date) return <div key={di}/>;
                   const status = getDayStatus(date);
-                  const isToday = date.toDateString() === new Date().toDateString();
-                  const key = date.toISOString().split("T")[0];
+                  const isToday = localDateKey(date) === todayKey();
+                  const key = localDateKey(date);
                   const logged = hoursByDate[key] || 0;
                   const target = targetHours(date);
 
-                  let bg = "bg-border/20 text-muted/40"; // weekend / future
+                  let bg = "bg-border/15 text-muted/30"; // weekend
                   if (status === "green") bg = "bg-emerald-100 text-emerald-700 border border-emerald-200";
                   if (status === "red") bg = "bg-red-50 text-red-500 border border-red-200";
-                  if (status === "future") bg = "bg-border/10 text-muted/30";
+                  if (status === "future") bg = "bg-border/10 text-muted/40 border border-dashed border-border/30";
 
                   return (
-                    <div key={di} title={target > 0 ? `${logged}h / ${target}h target` : ""}
-                      className={`relative rounded-lg p-1.5 text-center transition-all ${bg} ${isToday ? "ring-2 ring-accent ring-offset-1" : ""}`}>
-                      <span className="text-xs font-mono leading-none">{date.getDate()}</span>
+                    <div key={di}
+                      title={target > 0 ? `${logged}h logged / ${target}h target` : "Weekend"}
+                      className={`relative rounded-lg p-1.5 text-center ${bg} ${isToday ? "ring-2 ring-accent ring-offset-1" : ""}`}>
+                      <span className="text-xs font-mono leading-none block">{date.getDate()}</span>
                       {target > 0 && status !== "future" && (
-                        <div className="text-[9px] font-mono leading-none mt-0.5 opacity-70">
+                        <div className="text-[9px] font-mono leading-none mt-0.5 opacity-80">
                           {logged > 0 ? `${logged}h` : "—"}
                         </div>
                       )}
@@ -328,17 +347,23 @@ export default function Dashboard() {
             ))}
           </div>
 
-          {/* Legend + summary */}
+          {/* Legend */}
           <div className="flex items-center justify-between mt-5 pt-4 border-t border-border/50">
             <div className="flex items-center gap-4 text-xs font-mono text-muted">
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-emerald-100 border border-emerald-200 inline-block"/>{greenDays} on target</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-red-50 border border-red-200 inline-block"/>{redDays} missing</span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-sm bg-emerald-100 border border-emerald-200 inline-block"/>
+                {greenDays} on target
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-3 h-3 rounded-sm bg-red-50 border border-red-200 inline-block"/>
+                {redDays} missing
+              </span>
             </div>
             <span className="text-xs font-mono text-muted">Mon–Thu 8h · Fri 7h</span>
           </div>
         </div>
 
-        {/* Activity breakdown chart */}
+        {/* Activity breakdown */}
         {clientTotals.length > 0 && (
           <div className="bg-card border border-border rounded-2xl p-7 animate-fade-up delay-200">
             <h2 className="font-display text-sm font-bold uppercase tracking-widest text-muted mb-6">Hours by activity</h2>
@@ -380,7 +405,7 @@ export default function Dashboard() {
             <div className="bg-card border border-border rounded-2xl p-12 text-center">
               <div className="text-4xl mb-3">🕐</div>
               <p className="font-display font-semibold text-ink mb-1">No entries yet</p>
-              <p className="text-sm text-muted">Log your first hours to get started.</p>
+              <p className="text-sm text-muted">Log your first hours using the form above.</p>
             </div>
           ) : (
             <div className="bg-card border border-border rounded-2xl overflow-hidden">
@@ -398,7 +423,7 @@ export default function Dashboard() {
                     {filtered.map((entry, i) => (
                       <tr key={entry.id} className={`border-b border-border/50 hover:bg-paper/60 transition-colors ${i === filtered.length - 1 ? "border-b-0" : ""}`}>
                         <td className="px-6 py-4 text-sm font-mono text-muted whitespace-nowrap">
-                          {new Date(entry.date + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                          {new Date(entry.date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
                         </td>
                         <td className="px-4 py-4">
                           <span className="inline-block text-xs font-mono bg-ink/8 text-ink rounded-md px-2 py-1 whitespace-nowrap">{entry.client}</span>
