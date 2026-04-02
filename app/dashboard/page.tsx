@@ -60,6 +60,8 @@ export default function Dashboard() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) { router.push("/login"); return; }
       setUser({ email: session.user.email, id: session.user.id });
+      // Ensure a profile row exists for this user
+      await supabase.from("profiles").upsert({ id: session.user.id }, { onConflict: "id", ignoreDuplicates: true } as any);
       fetchClients();
       fetchEntries(session.user.id);
     });
