@@ -7,7 +7,7 @@ const ADMIN_EMAIL = "chris.shepherd@jympartnership.co.uk";
 
 type Client = { id: string; name: string };
 type Entry = { id: string; date: string; client: string; hours: number; user_id: string; user_email: string };
-type UserSummary = { email: string; totalHours: number; byClient: Record<string, number> };
+type Profile = { id: string; display_name: string | null; email: string };
 
 export default function AdminPage() {
   const supabase = createClient();
@@ -15,30 +15,41 @@ export default function AdminPage() {
 
   const [clients, setClients] = useState<Client[]>([]);
   const [entries, setEntries] = useState<Entry[]>([]);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [newClient, setNewClient] = useState("");
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState("");
-  const [reportView, setReportView] = useState<"by-user" | "by-client">("by-client");
+  const [reportView, setReportView] = useState<"by-client" | "by-user">("by-client");
   const [filterMonth, setFilterMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [editingName, setEditingName] = useState<Record<string, string>>({});
 
-  const fetchClients = useCallback(async () => {
-    const { data } = await supabase.from("clients").select("*").order("name");
-    setClients(data || []);
-  }, [supabase]);
+  const fetchAll = useCallback(async () => {
+    const [{ data: clientData }, { data: entryData }, { data: profileData }] = await Promise.all([
+      supabase.from("clients").select("*").order("name"),
+      supabase.from("timesheet_entries").select("*").order("date", { ascending: false }),
+      supabase.from("profiles").select("*"),
+    ]);
+    setClients(clientData || []);
+    setEntries(entryData || []);
 
-  const fetchEntries = useCallback(async () => {
-    // Fetch all entries with user emails via a join on auth.users isn't directly possible client-side,
-    // so we fetch entries and get user emails from profiles or metadata
-    const { data } = await supabase
-      .from("timesheet_entries")
-      .select("*")
-      .order("date", { ascending: false });
+    // Build profile list — merge with known emails from entries
+    const profileMap: Record<string, Profile> = {};
+    (profileData || []).forEach((p: any) => {
+      profileMap[p.id] = { id: p.id, display_name: p.display_name, email: "" };
+    });
+    // Fill in emails from entries
+    (entryData || []).forEach((e: any) => {
+      if (profileMap[e.user_id]) profileMap[e.user_id].email = e.user_email || "";
+      else profileMap[e.user_id] = { id: e.user_id, display_name: null, email: e.user_email || e.user_id };
+    });
+    const profileList = Object.values(profileMap);
+    setProfiles(profileList);
+    // Pre-fill editing state
+    const nameMap: Record<string, string> = {};
+    profileList.forEach(p => { nameMap[p.id] = p.display_name || ""; });
+    setEditingName(nameMap);
 
-    // Fetch all users list — only works if we store emails in a profiles table
-    // Instead, we'll use user_id and group by that, showing truncated IDs
-    // For better UX we store email at insert time in the entry itself
-    setEntries(data || []);
     setLoading(false);
   }, [supabase]);
 
@@ -46,32 +57,44 @@ export default function AdminPage() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) { router.push("/login"); return; }
       if (session.user.email !== ADMIN_EMAIL) { router.push("/dashboard"); return; }
-      fetchClients();
-      fetchEntries();
+      fetchAll();
     });
-  }, [supabase, router, fetchClients, fetchEntries]);
+  }, [supabase, router, fetchAll]);
 
-  async function handleAdd(e: React.FormEvent) {
+  async function handleAddClient(e: React.FormEvent) {
     e.preventDefault();
     if (!newClient.trim()) return;
     setSaving(true);
     await supabase.from("clients").insert({ name: newClient.trim() });
     setNewClient("");
-    await fetchClients();
+    await fetchAll();
     setSaving(false);
     setSuccess("Client added!");
     setTimeout(() => setSuccess(""), 3000);
   }
 
-  async function handleDelete(id: string) {
+  async function handleDeleteClient(id: string) {
     await supabase.from("clients").delete().eq("id", id);
-    fetchClients();
+    fetchAll();
+  }
+
+  async function handleSaveName(userId: string) {
+    const name = editingName[userId]?.trim() || null;
+    await supabase.from("profiles").upsert({ id: userId, display_name: name }, { onConflict: "id" });
+    setSuccess("Name saved!");
+    setTimeout(() => setSuccess(""), 3000);
+    fetchAll();
+  }
+
+  function getDisplayName(userId: string, userEmail: string) {
+    const profile = profiles.find(p => p.id === userId);
+    return profile?.display_name || userEmail || userId;
   }
 
   function exportReportCSV() {
     const filtered = filterMonth ? entries.filter(e => e.date.startsWith(filterMonth)) : entries;
-    const rows = [["Date", "User", "Client", "Hours"]];
-    filtered.forEach(e => rows.push([e.date, e.user_email || e.user_id, e.client, String(e.hours)]));
+    const rows = [["Date", "Person", "Client", "Hours"]];
+    filtered.forEach(e => rows.push([e.date, getDisplayName(e.user_id, e.user_email), e.client, String(e.hours)]));
     const csv = rows.map(r => r.map(v => `"${v}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -80,40 +103,34 @@ export default function AdminPage() {
     a.click(); URL.revokeObjectURL(url);
   }
 
-  // Filter entries by selected month
-  const filteredEntries = filterMonth
-    ? entries.filter(e => e.date.startsWith(filterMonth))
-    : entries;
+  const filteredEntries = filterMonth ? entries.filter(e => e.date.startsWith(filterMonth)) : entries;
 
-  // By-client summary
   const clientSummary = clients.map(c => {
-    const clientEntries = filteredEntries.filter(e => e.client === c.name);
-    const totalHours = clientEntries.reduce((s, e) => s + e.hours, 0);
-    const userBreakdown: Record<string, number> = {};
-    clientEntries.forEach(e => {
-      const key = e.user_email || e.user_id;
-      userBreakdown[key] = (userBreakdown[key] || 0) + e.hours;
+    const ce = filteredEntries.filter(e => e.client === c.name);
+    const totalHours = ce.reduce((s, e) => s + e.hours, 0);
+    const userBreakdown: Record<string, { name: string; hours: number }> = {};
+    ce.forEach(e => {
+      const key = e.user_id;
+      const name = getDisplayName(e.user_id, e.user_email);
+      if (!userBreakdown[key]) userBreakdown[key] = { name, hours: 0 };
+      userBreakdown[key].hours += e.hours;
     });
-    return { name: c.name, totalHours, userBreakdown };
-  }).filter(c => c.totalHours > 0);
+    return { name: c.name, totalHours, userBreakdown: Object.values(userBreakdown) };
+  }).filter(c => c.totalHours > 0).sort((a, b) => b.totalHours - a.totalHours);
 
-  // By-user summary
-  const userMap: Record<string, UserSummary> = {};
-  filteredEntries.forEach(e => {
-    const key = e.user_email || e.user_id;
-    if (!userMap[key]) userMap[key] = { email: key, totalHours: 0, byClient: {} };
-    userMap[key].totalHours += e.hours;
-    userMap[key].byClient[e.client] = (userMap[key].byClient[e.client] || 0) + e.hours;
-  });
-  const userSummary = Object.values(userMap).sort((a, b) => b.totalHours - a.totalHours);
+  const userSummary = profiles.map(p => {
+    const ue = filteredEntries.filter(e => e.user_id === p.id);
+    const totalHours = ue.reduce((s, e) => s + e.hours, 0);
+    const byClient: Record<string, number> = {};
+    ue.forEach(e => { byClient[e.client] = (byClient[e.client] || 0) + e.hours; });
+    return { id: p.id, name: p.display_name || p.email || p.id, totalHours, byClient: Object.entries(byClient) };
+  }).filter(u => u.totalHours > 0).sort((a, b) => b.totalHours - a.totalHours);
 
   const totalAllHours = filteredEntries.reduce((s, e) => s + e.hours, 0);
   const maxClientHours = Math.max(...clientSummary.map(c => c.totalHours), 1);
 
-  // Generate month options (last 12 months)
   const monthOptions = Array.from({ length: 12 }, (_, i) => {
-    const d = new Date();
-    d.setMonth(d.getMonth() - i);
+    const d = new Date(); d.setMonth(d.getMonth() - i);
     return d.toISOString().slice(0, 7);
   });
 
@@ -147,7 +164,7 @@ export default function AdminPage() {
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-6 py-10 space-y-10">
+      <main className="max-w-4xl mx-auto px-6 py-10 space-y-12">
 
         {success && (
           <div className="animate-fade-in fixed top-6 right-6 z-50 bg-ink text-paper text-sm font-mono px-4 py-2.5 rounded-xl shadow-xl">
@@ -155,29 +172,23 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ── REPORTING SECTION ── */}
-        <div className="animate-fade-up">
-          <div className="flex items-end justify-between mb-6">
+        {/* ── TIME REPORT ── */}
+        <section className="animate-fade-up space-y-6">
+          <div className="flex items-end justify-between">
             <div>
               <h1 className="font-display text-4xl font-bold text-ink">Time Report</h1>
               <p className="text-sm text-muted mt-1">All staff hours across clients.</p>
             </div>
-            <button
-              onClick={exportReportCSV}
-              className="text-xs font-mono px-3 py-1.5 border border-border rounded-lg hover:border-ink hover:text-ink text-muted transition-all flex items-center gap-1.5"
-            >
+            <button onClick={exportReportCSV}
+              className="text-xs font-mono px-3 py-1.5 border border-border rounded-lg hover:border-ink hover:text-ink text-muted transition-all flex items-center gap-1.5">
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v7M3 5l3 3 3-3M1 10h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
               Export CSV
             </button>
           </div>
 
-          {/* Controls */}
-          <div className="flex items-center gap-3 mb-6 flex-wrap">
-            <select
-              value={filterMonth}
-              onChange={e => setFilterMonth(e.target.value)}
-              className="text-xs font-mono px-3 py-1.5 rounded-lg border border-border bg-paper text-ink focus:outline-none focus:border-ink transition-all"
-            >
+          <div className="flex items-center gap-3 flex-wrap">
+            <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)}
+              className="text-xs font-mono px-3 py-1.5 rounded-lg border border-border bg-paper text-ink focus:outline-none focus:border-ink transition-all">
               <option value="">All time</option>
               {monthOptions.map(m => (
                 <option key={m} value={m}>
@@ -186,23 +197,18 @@ export default function AdminPage() {
               ))}
             </select>
             <div className="flex rounded-lg border border-border overflow-hidden">
-              <button
-                onClick={() => setReportView("by-client")}
-                className={`text-xs font-mono px-3 py-1.5 transition-colors ${reportView === "by-client" ? "bg-ink text-paper" : "bg-paper text-muted hover:text-ink"}`}
-              >
+              <button onClick={() => setReportView("by-client")}
+                className={`text-xs font-mono px-3 py-1.5 transition-colors ${reportView === "by-client" ? "bg-ink text-paper" : "bg-paper text-muted hover:text-ink"}`}>
                 By client
               </button>
-              <button
-                onClick={() => setReportView("by-user")}
-                className={`text-xs font-mono px-3 py-1.5 transition-colors ${reportView === "by-user" ? "bg-ink text-paper" : "bg-paper text-muted hover:text-ink"}`}
-              >
+              <button onClick={() => setReportView("by-user")}
+                className={`text-xs font-mono px-3 py-1.5 transition-colors ${reportView === "by-user" ? "bg-ink text-paper" : "bg-paper text-muted hover:text-ink"}`}>
                 By person
               </button>
             </div>
           </div>
 
-          {/* Summary stat */}
-          <div className="grid grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-3 gap-4">
             <div className="bg-card border border-border rounded-2xl p-5">
               <p className="text-xs font-mono text-muted uppercase tracking-widest mb-1">Total hours</p>
               <p className="font-display text-3xl font-bold">{totalAllHours.toFixed(1)}</p>
@@ -222,15 +228,11 @@ export default function AdminPage() {
               <p className="text-sm text-muted">No entries for this period.</p>
             </div>
           ) : reportView === "by-client" ? (
-            /* By client view */
             <div className="space-y-4">
-              {clientSummary.sort((a, b) => b.totalHours - a.totalHours).map(c => (
+              {clientSummary.map(c => (
                 <div key={c.name} className="bg-card border border-border rounded-2xl overflow-hidden">
-                  {/* Client header */}
                   <div className="flex items-center justify-between px-6 py-4 border-b border-border/50">
-                    <div className="flex items-center gap-3">
-                      <span className="font-display font-bold text-sm">{c.name}</span>
-                    </div>
+                    <span className="font-display font-bold text-sm">{c.name}</span>
                     <div className="flex items-center gap-4">
                       <div className="w-32 bg-border/40 rounded-full h-1.5 overflow-hidden">
                         <div className="h-full bg-accent rounded-full" style={{ width: `${(c.totalHours / maxClientHours) * 100}%` }} />
@@ -238,28 +240,24 @@ export default function AdminPage() {
                       <span className="font-display font-bold text-sm w-14 text-right">{c.totalHours.toFixed(1)}h</span>
                     </div>
                   </div>
-                  {/* User breakdown */}
-                  {Object.entries(c.userBreakdown).sort((a, b) => b[1] - a[1]).map(([email, hours]) => (
-                    <div key={email} className="flex items-center justify-between px-6 py-3 border-b border-border/30 last:border-b-0 bg-paper/30">
-                      <span className="text-xs font-mono text-muted truncate max-w-xs">{email}</span>
-                      <span className="text-xs font-mono text-ink font-medium">{hours.toFixed(1)}h</span>
+                  {c.userBreakdown.sort((a, b) => b.hours - a.hours).map(u => (
+                    <div key={u.name} className="flex items-center justify-between px-6 py-3 border-b border-border/30 last:border-b-0 bg-paper/30">
+                      <span className="text-xs font-mono text-muted">{u.name}</span>
+                      <span className="text-xs font-mono text-ink font-medium">{u.hours.toFixed(1)}h</span>
                     </div>
                   ))}
                 </div>
               ))}
             </div>
           ) : (
-            /* By user view */
             <div className="space-y-4">
               {userSummary.map(u => (
-                <div key={u.email} className="bg-card border border-border rounded-2xl overflow-hidden">
-                  {/* User header */}
+                <div key={u.id} className="bg-card border border-border rounded-2xl overflow-hidden">
                   <div className="flex items-center justify-between px-6 py-4 border-b border-border/50">
-                    <span className="font-display font-bold text-sm truncate max-w-xs">{u.email}</span>
+                    <span className="font-display font-bold text-sm">{u.name}</span>
                     <span className="font-display font-bold text-sm">{u.totalHours.toFixed(1)}h</span>
                   </div>
-                  {/* Client breakdown */}
-                  {Object.entries(u.byClient).sort((a, b) => b[1] - a[1]).map(([client, hours]) => (
+                  {u.byClient.sort((a, b) => b[1] - a[1]).map(([client, hours]) => (
                     <div key={client} className="flex items-center justify-between px-6 py-3 border-b border-border/30 last:border-b-0 bg-paper/30">
                       <span className="text-xs font-mono text-muted">{client}</span>
                       <span className="text-xs font-mono text-ink font-medium">{hours.toFixed(1)}h</span>
@@ -269,10 +267,46 @@ export default function AdminPage() {
               ))}
             </div>
           )}
-        </div>
+        </section>
 
-        {/* ── CLIENT MANAGEMENT ── */}
-        <div className="pt-4 border-t border-border space-y-6">
+        {/* ── MANAGE PEOPLE ── */}
+        <section className="border-t border-border pt-10 space-y-6 animate-fade-up delay-100">
+          <div>
+            <h2 className="font-display text-2xl font-bold text-ink">Manage People</h2>
+            <p className="text-sm text-muted mt-1">Set display names for each team member. These appear in reports.</p>
+          </div>
+          {profiles.length === 0 ? (
+            <div className="bg-card border border-border rounded-2xl p-10 text-center">
+              <p className="text-sm text-muted">No users have logged time yet.</p>
+            </div>
+          ) : (
+            <div className="bg-card border border-border rounded-2xl overflow-hidden">
+              {profiles.map((profile, i) => (
+                <div key={profile.id} className={`flex items-center gap-4 px-6 py-4 ${i < profiles.length - 1 ? "border-b border-border/50" : ""}`}>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-mono text-muted truncate">{profile.email || profile.id}</p>
+                  </div>
+                  <input
+                    type="text"
+                    value={editingName[profile.id] || ""}
+                    onChange={e => setEditingName(n => ({ ...n, [profile.id]: e.target.value }))}
+                    placeholder="Display name"
+                    className="w-44 px-3 py-2 rounded-lg border border-border bg-paper text-ink text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"
+                  />
+                  <button
+                    onClick={() => handleSaveName(profile.id)}
+                    className="text-xs font-mono px-3 py-2 bg-ink text-paper rounded-lg hover:bg-ink/90 transition-all whitespace-nowrap"
+                  >
+                    Save
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* ── MANAGE CLIENTS ── */}
+        <section className="border-t border-border pt-10 space-y-6 animate-fade-up delay-200">
           <div>
             <h2 className="font-display text-2xl font-bold text-ink">Manage Clients</h2>
             <p className="text-sm text-muted mt-1">Add or remove clients from the timesheet dropdown.</p>
@@ -280,29 +314,19 @@ export default function AdminPage() {
 
           <div className="bg-card border border-border rounded-2xl p-7">
             <h3 className="font-display text-xs font-bold uppercase tracking-widest text-muted mb-5">Add new client</h3>
-            <form onSubmit={handleAdd} className="flex gap-3">
-              <input
-                type="text"
-                required
-                value={newClient}
-                onChange={e => setNewClient(e.target.value)}
+            <form onSubmit={handleAddClient} className="flex gap-3">
+              <input type="text" required value={newClient} onChange={e => setNewClient(e.target.value)}
                 placeholder="Client name"
-                className="flex-1 px-4 py-3 rounded-xl border border-border bg-paper text-ink placeholder-muted/50 text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"
-              />
-              <button
-                type="submit"
-                disabled={saving}
-                className="px-6 py-3 bg-ink text-paper font-display font-semibold text-sm rounded-xl hover:bg-ink/90 active:scale-95 transition-all disabled:opacity-50 whitespace-nowrap"
-              >
+                className="flex-1 px-4 py-3 rounded-xl border border-border bg-paper text-ink placeholder-muted/50 text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all" />
+              <button type="submit" disabled={saving}
+                className="px-6 py-3 bg-ink text-paper font-display font-semibold text-sm rounded-xl hover:bg-ink/90 active:scale-95 transition-all disabled:opacity-50 whitespace-nowrap">
                 {saving ? "Adding…" : "Add client"}
               </button>
             </form>
           </div>
 
           <div>
-            <h3 className="font-display text-xs font-bold uppercase tracking-widest text-muted mb-4">
-              Current clients ({clients.length})
-            </h3>
+            <h3 className="font-display text-xs font-bold uppercase tracking-widest text-muted mb-4">Current clients ({clients.length})</h3>
             {clients.length === 0 ? (
               <div className="bg-card border border-border rounded-2xl p-10 text-center">
                 <p className="text-sm text-muted">No clients yet. Add your first one above.</p>
@@ -310,15 +334,9 @@ export default function AdminPage() {
             ) : (
               <div className="bg-card border border-border rounded-2xl overflow-hidden">
                 {clients.map((client, i) => (
-                  <div
-                    key={client.id}
-                    className={`flex items-center justify-between px-6 py-4 hover:bg-paper/60 transition-colors ${i < clients.length - 1 ? "border-b border-border/50" : ""}`}
-                  >
+                  <div key={client.id} className={`flex items-center justify-between px-6 py-4 hover:bg-paper/60 transition-colors ${i < clients.length - 1 ? "border-b border-border/50" : ""}`}>
                     <span className="font-body text-sm text-ink">{client.name}</span>
-                    <button
-                      onClick={() => handleDelete(client.id)}
-                      className="text-xs font-mono text-muted hover:text-accent transition-colors"
-                    >
+                    <button onClick={() => handleDeleteClient(client.id)} className="text-xs font-mono text-muted hover:text-accent transition-colors">
                       Remove
                     </button>
                   </div>
@@ -326,7 +344,7 @@ export default function AdminPage() {
               </div>
             )}
           </div>
-        </div>
+        </section>
 
       </main>
     </div>
