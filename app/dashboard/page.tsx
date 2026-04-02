@@ -57,7 +57,7 @@ export default function Dashboard() {
   }, [supabase]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) { router.push("/login"); return; }
       setUser({ email: session.user.email, id: session.user.id });
       // Ensure a profile row exists for this user
