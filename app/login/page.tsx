@@ -20,6 +20,12 @@ function LoginForm() {
     if (searchParams.get("error") === "invalid_link") {
       setError("This invite link has expired. Please ask your administrator to resend the invite.");
     }
+    // Handle hash fragment errors from Supabase (e.g. expired invite links)
+    const hash = window.location.hash;
+    if (hash.includes("error=access_denied") || hash.includes("otp_expired") || hash.includes("error_code=")) {
+      setError("This invite link has expired or is invalid. Please ask your administrator to resend the invite.");
+      window.history.replaceState(null, "", window.location.pathname);
+    }
   }, [searchParams]);
 
   async function handleLogin(e: React.FormEvent) {
