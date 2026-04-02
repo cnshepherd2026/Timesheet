@@ -1,11 +1,11 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
 const ADMIN_EMAIL = "chris.shepherd@jympartnership.co.uk";
 
-type Client = { id: string; name: string };
+type Client = { id: string; name: string; sort_order: number };
 type Entry = { id: string; date: string; client: string; hours: number; user_id: string; user_email: string };
 type Profile = { id: string; display_name: string | null; email: string };
 
@@ -24,32 +24,32 @@ export default function AdminPage() {
   const [filterMonth, setFilterMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [editingName, setEditingName] = useState<Record<string, string>>({});
 
+  // Drag state
+  const dragItem = useRef<number | null>(null);
+  const dragOverItem = useRef<number | null>(null);
+
   const fetchAll = useCallback(async () => {
     const [{ data: clientData }, { data: entryData }, { data: profileData }] = await Promise.all([
-      supabase.from("clients").select("*").order("name"),
+      supabase.from("clients").select("*").order("sort_order").order("name"),
       supabase.from("timesheet_entries").select("*").order("date", { ascending: false }),
       supabase.from("profiles").select("*"),
     ]);
     setClients(clientData || []);
     setEntries(entryData || []);
 
-    // Build profile list — merge with known emails from entries
     const profileMap: Record<string, Profile> = {};
     (profileData || []).forEach((p: any) => {
       profileMap[p.id] = { id: p.id, display_name: p.display_name, email: "" };
     });
-    // Fill in emails from entries
     (entryData || []).forEach((e: any) => {
       if (profileMap[e.user_id]) profileMap[e.user_id].email = e.user_email || "";
       else profileMap[e.user_id] = { id: e.user_id, display_name: null, email: e.user_email || e.user_id };
     });
     const profileList = Object.values(profileMap);
     setProfiles(profileList);
-    // Pre-fill editing state
     const nameMap: Record<string, string> = {};
     profileList.forEach(p => { nameMap[p.id] = p.display_name || ""; });
     setEditingName(nameMap);
-
     setLoading(false);
   }, [supabase]);
 
@@ -65,11 +65,12 @@ export default function AdminPage() {
     e.preventDefault();
     if (!newClient.trim()) return;
     setSaving(true);
-    await supabase.from("clients").insert({ name: newClient.trim() });
+    const maxOrder = clients.reduce((m, c) => Math.max(m, c.sort_order || 0), 0);
+    await supabase.from("clients").insert({ name: newClient.trim(), sort_order: maxOrder + 1 });
     setNewClient("");
     await fetchAll();
     setSaving(false);
-    setSuccess("Client added!");
+    setSuccess("Activity added!");
     setTimeout(() => setSuccess(""), 3000);
   }
 
@@ -80,10 +81,36 @@ export default function AdminPage() {
 
   async function handleSaveName(userId: string) {
     const name = editingName[userId]?.trim() || null;
-    await supabase.from("profiles").upsert({ id: userId, display_name: name }, { onConflict: "id" });
+    await supabase.from("profiles").upsert({ id: userId, display_name: name }, { onConflict: "id" } as any);
     setSuccess("Name saved!");
     setTimeout(() => setSuccess(""), 3000);
     fetchAll();
+  }
+
+  // Drag handlers
+  function handleDragStart(index: number) {
+    dragItem.current = index;
+  }
+
+  function handleDragEnter(index: number) {
+    dragOverItem.current = index;
+    // Reorder locally for visual feedback
+    const newList = [...clients];
+    const dragged = newList[dragItem.current!];
+    newList.splice(dragItem.current!, 1);
+    newList.splice(index, 0, dragged);
+    dragItem.current = index;
+    setClients(newList);
+  }
+
+  async function handleDragEnd() {
+    // Persist new order to Supabase
+    const updates = clients.map((c, i) => ({ id: c.id, name: c.name, sort_order: i }));
+    await Promise.all(updates.map(u => supabase.from("clients").update({ sort_order: u.sort_order }).eq("id", u.id)));
+    dragItem.current = null;
+    dragOverItem.current = null;
+    setSuccess("Order saved!");
+    setTimeout(() => setSuccess(""), 2000);
   }
 
   function getDisplayName(userId: string, userEmail: string) {
@@ -93,7 +120,7 @@ export default function AdminPage() {
 
   function exportReportCSV() {
     const filtered = filterMonth ? entries.filter(e => e.date.startsWith(filterMonth)) : entries;
-    const rows = [["Date", "Person", "Client", "Hours"]];
+    const rows = [["Date", "Person", "Activity", "Hours"]];
     filtered.forEach(e => rows.push([e.date, getDisplayName(e.user_id, e.user_email), e.client, String(e.hours)]));
     const csv = rows.map(r => r.map(v => `"${v}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -177,7 +204,7 @@ export default function AdminPage() {
           <div className="flex items-end justify-between">
             <div>
               <h1 className="font-display text-4xl font-bold text-ink">Time Report</h1>
-              <p className="text-sm text-muted mt-1">All staff hours across clients.</p>
+              <p className="text-sm text-muted mt-1">All staff hours across activities.</p>
             </div>
             <button onClick={exportReportCSV}
               className="text-xs font-mono px-3 py-1.5 border border-border rounded-lg hover:border-ink hover:text-ink text-muted transition-all flex items-center gap-1.5">
@@ -199,7 +226,7 @@ export default function AdminPage() {
             <div className="flex rounded-lg border border-border overflow-hidden">
               <button onClick={() => setReportView("by-client")}
                 className={`text-xs font-mono px-3 py-1.5 transition-colors ${reportView === "by-client" ? "bg-ink text-paper" : "bg-paper text-muted hover:text-ink"}`}>
-                By client
+                By activity
               </button>
               <button onClick={() => setReportView("by-user")}
                 className={`text-xs font-mono px-3 py-1.5 transition-colors ${reportView === "by-user" ? "bg-ink text-paper" : "bg-paper text-muted hover:text-ink"}`}>
@@ -214,7 +241,7 @@ export default function AdminPage() {
               <p className="font-display text-3xl font-bold">{totalAllHours.toFixed(1)}</p>
             </div>
             <div className="bg-card border border-border rounded-2xl p-5">
-              <p className="text-xs font-mono text-muted uppercase tracking-widest mb-1">Active clients</p>
+              <p className="text-xs font-mono text-muted uppercase tracking-widest mb-1">Activities</p>
               <p className="font-display text-3xl font-bold">{clientSummary.length}</p>
             </div>
             <div className="bg-card border border-border rounded-2xl p-5">
@@ -273,7 +300,7 @@ export default function AdminPage() {
         <section className="border-t border-border pt-10 space-y-6 animate-fade-up delay-100">
           <div>
             <h2 className="font-display text-2xl font-bold text-ink">Manage People</h2>
-            <p className="text-sm text-muted mt-1">Set display names for each team member. These appear in reports.</p>
+            <p className="text-sm text-muted mt-1">Set display names for each team member.</p>
           </div>
           {profiles.length === 0 ? (
             <div className="bg-card border border-border rounded-2xl p-10 text-center">
@@ -293,10 +320,8 @@ export default function AdminPage() {
                     placeholder="Display name"
                     className="w-44 px-3 py-2 rounded-lg border border-border bg-paper text-ink text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"
                   />
-                  <button
-                    onClick={() => handleSaveName(profile.id)}
-                    className="text-xs font-mono px-3 py-2 bg-ink text-paper rounded-lg hover:bg-ink/90 transition-all whitespace-nowrap"
-                  >
+                  <button onClick={() => handleSaveName(profile.id)}
+                    className="text-xs font-mono px-3 py-2 bg-ink text-paper rounded-lg hover:bg-ink/90 transition-all whitespace-nowrap">
                     Save
                   </button>
                 </div>
@@ -305,44 +330,67 @@ export default function AdminPage() {
           )}
         </section>
 
-        {/* ── MANAGE CLIENTS ── */}
+        {/* ── MANAGE ACTIVITIES ── */}
         <section className="border-t border-border pt-10 space-y-6 animate-fade-up delay-200">
           <div>
-            <h2 className="font-display text-2xl font-bold text-ink">Manage Clients</h2>
-            <p className="text-sm text-muted mt-1">Add or remove clients from the timesheet dropdown.</p>
+            <h2 className="font-display text-2xl font-bold text-ink">Manage Activities</h2>
+            <p className="text-sm text-muted mt-1">Add clients, leave types, or any activity. Drag to reorder.</p>
           </div>
 
           <div className="bg-card border border-border rounded-2xl p-7">
-            <h3 className="font-display text-xs font-bold uppercase tracking-widest text-muted mb-5">Add new client</h3>
+            <h3 className="font-display text-xs font-bold uppercase tracking-widest text-muted mb-5">Add new activity</h3>
             <form onSubmit={handleAddClient} className="flex gap-3">
               <input type="text" required value={newClient} onChange={e => setNewClient(e.target.value)}
-                placeholder="Client name"
+                placeholder="e.g. Annual Leave, Client Name…"
                 className="flex-1 px-4 py-3 rounded-xl border border-border bg-paper text-ink placeholder-muted/50 text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all" />
               <button type="submit" disabled={saving}
                 className="px-6 py-3 bg-ink text-paper font-display font-semibold text-sm rounded-xl hover:bg-ink/90 active:scale-95 transition-all disabled:opacity-50 whitespace-nowrap">
-                {saving ? "Adding…" : "Add client"}
+                {saving ? "Adding…" : "Add"}
               </button>
             </form>
           </div>
 
           <div>
-            <h3 className="font-display text-xs font-bold uppercase tracking-widest text-muted mb-4">Current clients ({clients.length})</h3>
+            <h3 className="font-display text-xs font-bold uppercase tracking-widest text-muted mb-4">
+              Current activities ({clients.length})
+            </h3>
             {clients.length === 0 ? (
               <div className="bg-card border border-border rounded-2xl p-10 text-center">
-                <p className="text-sm text-muted">No clients yet. Add your first one above.</p>
+                <p className="text-sm text-muted">No activities yet. Add your first one above.</p>
               </div>
             ) : (
               <div className="bg-card border border-border rounded-2xl overflow-hidden">
                 {clients.map((client, i) => (
-                  <div key={client.id} className={`flex items-center justify-between px-6 py-4 hover:bg-paper/60 transition-colors ${i < clients.length - 1 ? "border-b border-border/50" : ""}`}>
-                    <span className="font-body text-sm text-ink">{client.name}</span>
-                    <button onClick={() => handleDeleteClient(client.id)} className="text-xs font-mono text-muted hover:text-accent transition-colors">
+                  <div
+                    key={client.id}
+                    draggable
+                    onDragStart={() => handleDragStart(i)}
+                    onDragEnter={() => handleDragEnter(i)}
+                    onDragEnd={handleDragEnd}
+                    onDragOver={e => e.preventDefault()}
+                    className={`flex items-center gap-3 px-6 py-4 hover:bg-paper/60 transition-colors cursor-grab active:cursor-grabbing select-none ${i < clients.length - 1 ? "border-b border-border/50" : ""}`}
+                  >
+                    {/* Drag handle */}
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="text-muted/50 shrink-0">
+                      <circle cx="4" cy="3" r="1.2" fill="currentColor"/>
+                      <circle cx="10" cy="3" r="1.2" fill="currentColor"/>
+                      <circle cx="4" cy="7" r="1.2" fill="currentColor"/>
+                      <circle cx="10" cy="7" r="1.2" fill="currentColor"/>
+                      <circle cx="4" cy="11" r="1.2" fill="currentColor"/>
+                      <circle cx="10" cy="11" r="1.2" fill="currentColor"/>
+                    </svg>
+                    <span className="flex-1 font-body text-sm text-ink">{client.name}</span>
+                    <button
+                      onClick={() => handleDeleteClient(client.id)}
+                      className="text-xs font-mono text-muted hover:text-accent transition-colors"
+                    >
                       Remove
                     </button>
                   </div>
                 ))}
               </div>
             )}
+            <p className="text-xs font-mono text-muted mt-3">↕ Drag rows to reorder — order is saved automatically</p>
           </div>
         </section>
 
