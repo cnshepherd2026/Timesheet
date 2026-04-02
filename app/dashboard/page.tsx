@@ -88,7 +88,7 @@ export default function Dashboard() {
     setSaving(true);
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
-    const payload = { date: form.date, client: form.client, hours: parseFloat(form.hours), user_id: session.user.id };
+    const payload = { date: form.date, client: form.client, hours: parseFloat(form.hours), user_id: session.user.id, user_email: session.user.email };
     if (editId) {
       await supabase.from("timesheet_entries").update(payload).eq("id", editId);
       setSuccess("Entry updated!");
