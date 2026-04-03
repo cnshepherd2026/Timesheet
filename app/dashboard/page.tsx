@@ -58,6 +58,11 @@ export default function Dashboard() {
     const n = new Date();
     return { year: n.getFullYear(), month: n.getMonth() };
   });
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordSaving, setPasswordSaving] = useState(false);
 
   const [form, setForm] = useState({
     date: todayKey(),
@@ -90,6 +95,22 @@ export default function Dashboard() {
   }, [supabase, router, fetchEntries, fetchClients]);
 
   async function handleSignOut() { await supabase.auth.signOut(); router.push("/login"); }
+
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault();
+    setPasswordError("");
+    if (newPassword.length < 8) { setPasswordError("Password must be at least 8 characters."); return; }
+    if (newPassword !== confirmPassword) { setPasswordError("Passwords do not match."); return; }
+    setPasswordSaving(true);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) { setPasswordError(error.message); setPasswordSaving(false); return; }
+    setShowChangePassword(false);
+    setNewPassword("");
+    setConfirmPassword("");
+    setPasswordSaving(false);
+    setSuccess("Password updated!");
+    setTimeout(() => setSuccess(""), 3000);
+  }
 
   function resetForm() {
     setForm({ date: todayKey(), client: clients[0]?.name || "", hours: "8" });
@@ -193,6 +214,7 @@ export default function Dashboard() {
             {isAdmin && (
               <button onClick={() => router.push("/admin")} className="text-xs font-mono text-accent hover:text-accent/80 transition-colors">Admin</button>
             )}
+            <button onClick={() => setShowChangePassword(true)} className="text-xs font-mono text-muted hover:text-ink transition-colors">Change password</button>
             <button onClick={handleSignOut} className="text-xs font-mono text-muted hover:text-accent transition-colors">Sign out</button>
           </div>
         </div>
@@ -210,6 +232,42 @@ export default function Dashboard() {
 
         {success && (
           <div className="animate-fade-in fixed top-6 right-6 z-50 bg-ink text-paper text-sm font-mono px-4 py-2.5 rounded-xl shadow-xl">✓ {success}</div>
+        )}
+
+        {/* Change password modal */}
+        {showChangePassword && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-ink/20 backdrop-blur-sm" onClick={() => setShowChangePassword(false)}>
+            <div className="bg-card border border-border rounded-2xl p-8 shadow-xl w-full max-w-sm animate-fade-up" onClick={e => e.stopPropagation()}>
+              <h2 className="font-display text-xl font-bold mb-6">Change password</h2>
+              <form onSubmit={handleChangePassword} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-mono text-muted uppercase tracking-widest mb-2">New password</label>
+                  <input type="password" required value={newPassword} onChange={e => setNewPassword(e.target.value)}
+                    placeholder="At least 8 characters"
+                    className="w-full px-4 py-3 rounded-xl border border-border bg-paper text-ink placeholder-muted/50 text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"/>
+                </div>
+                <div>
+                  <label className="block text-xs font-mono text-muted uppercase tracking-widest mb-2">Confirm password</label>
+                  <input type="password" required value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
+                    placeholder="Repeat your password"
+                    className="w-full px-4 py-3 rounded-xl border border-border bg-paper text-ink placeholder-muted/50 text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"/>
+                </div>
+                {passwordError && (
+                  <div className="text-xs text-accent font-mono bg-accent/8 border border-accent/20 rounded-lg px-3 py-2">{passwordError}</div>
+                )}
+                <div className="flex gap-3 pt-1">
+                  <button type="submit" disabled={passwordSaving}
+                    className="flex-1 py-3 bg-ink text-paper font-display font-semibold text-sm rounded-xl hover:bg-ink/90 active:scale-95 transition-all disabled:opacity-50">
+                    {passwordSaving ? "Saving…" : "Update password"}
+                  </button>
+                  <button type="button" onClick={() => { setShowChangePassword(false); setPasswordError(""); setNewPassword(""); setConfirmPassword(""); }}
+                    className="px-4 py-3 border border-border text-muted text-sm font-body rounded-xl hover:border-ink hover:text-ink transition-all">
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
         )}
 
         {/* ── LOG HOURS FORM — always visible ── */}
