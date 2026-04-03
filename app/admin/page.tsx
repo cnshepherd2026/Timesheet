@@ -191,8 +191,8 @@ export default function AdminPage() {
     return d.toISOString().slice(0, 7);
   });
 
-  // All unique users who have any entries
-  const allUsers = profiles.filter(p => entries.some(e => e.user_id === p.id));
+  // All users who have a profile (show everyone, even if no entries yet)
+  const allUsers = profiles;
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
