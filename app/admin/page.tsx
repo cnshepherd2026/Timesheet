@@ -3,11 +3,11 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
-const ADMIN_EMAILS = ["chris.shepherd@jympartnership.co.uk"];
+const SUPER_ADMIN = "chris.shepherd@jympartnership.co.uk";
 
 type Client = { id: string; name: string; sort_order: number };
 type Entry = { id: string; date: string; client: string; hours: number; user_id: string; user_email: string };
-type Profile = { id: string; display_name: string | null; email: string };
+type Profile = { id: string; display_name: string | null; email: string; is_admin: boolean };
 
 function localDateKey(date: Date): string {
   const y = date.getFullYear();
@@ -65,11 +65,11 @@ export default function AdminPage() {
 
     const profileMap: Record<string, Profile> = {};
     (profileData || []).forEach((p: any) => {
-      profileMap[p.id] = { id: p.id, display_name: p.display_name, email: "" };
+      profileMap[p.id] = { id: p.id, display_name: p.display_name, email: "", is_admin: p.is_admin || false };
     });
     (entryData || []).forEach((e: any) => {
       if (profileMap[e.user_id]) profileMap[e.user_id].email = e.user_email || "";
-      else profileMap[e.user_id] = { id: e.user_id, display_name: null, email: e.user_email || e.user_id };
+      else profileMap[e.user_id] = { id: e.user_id, display_name: null, email: e.user_email || e.user_id, is_admin: false };
     });
     const profileList = Object.values(profileMap);
     setProfiles(profileList);
@@ -80,9 +80,13 @@ export default function AdminPage() {
   }, [supabase]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) { router.push("/login"); return; }
-      if (!ADMIN_EMAILS.includes(session.user.email ?? "")) { router.push("/dashboard"); return; }
+      // Allow super admin or any user with is_admin = true
+      if (session.user.email !== SUPER_ADMIN) {
+        const { data: profile } = await supabase.from("profiles").select("is_admin").eq("id", session.user.id).single();
+        if (!profile?.is_admin) { router.push("/dashboard"); return; }
+      }
       fetchAll();
     });
   }, [supabase, router, fetchAll]);
@@ -109,6 +113,16 @@ export default function AdminPage() {
     const name = editingName[userId]?.trim() || null;
     await supabase.from("profiles").upsert({ id: userId, display_name: name }, { onConflict: "id" } as any);
     setSuccess("Name saved!");
+    setTimeout(() => setSuccess(""), 3000);
+    fetchAll();
+  }
+
+  async function handleToggleAdmin(userId: string, currentValue: boolean) {
+    // Prevent removing super admin's own admin status
+    const profile = profiles.find(p => p.id === userId);
+    if (profile?.email === SUPER_ADMIN && currentValue) return;
+    await supabase.from("profiles").update({ is_admin: !currentValue }).eq("id", userId);
+    setSuccess(!currentValue ? "Admin access granted!" : "Admin access removed!");
     setTimeout(() => setSuccess(""), 3000);
     fetchAll();
   }
@@ -397,7 +411,7 @@ export default function AdminPage() {
         <section className="border-t border-border pt-10 space-y-6 animate-fade-up">
           <div>
             <h2 className="font-display text-2xl font-bold text-ink">Manage People</h2>
-            <p className="text-sm text-muted mt-1">Set display names for each team member.</p>
+            <p className="text-sm text-muted mt-1">Set display names and admin access for each team member.</p>
           </div>
           {profiles.length === 0 ? (
             <div className="bg-card border border-border rounded-2xl p-10 text-center">
@@ -405,17 +419,35 @@ export default function AdminPage() {
             </div>
           ) : (
             <div className="bg-card border border-border rounded-2xl overflow-hidden">
+              {/* Column headers */}
+              <div className="grid grid-cols-[1fr_180px_80px_60px] gap-3 px-6 py-2 border-b border-border bg-paper/50">
+                <div className="text-xs font-mono text-muted uppercase tracking-widest">Email</div>
+                <div className="text-xs font-mono text-muted uppercase tracking-widest">Display name</div>
+                <div className="text-xs font-mono text-muted uppercase tracking-widest"></div>
+                <div className="text-xs font-mono text-muted uppercase tracking-widest text-center">Admin</div>
+              </div>
               {profiles.map((profile, i) => (
-                <div key={profile.id} className={`flex items-center gap-4 px-6 py-4 ${i < profiles.length - 1 ? "border-b border-border/50" : ""}`}>
-                  <div className="flex-1 min-w-0">
+                <div key={profile.id} className={`grid grid-cols-[1fr_180px_80px_60px] gap-3 items-center px-6 py-3 ${i < profiles.length - 1 ? "border-b border-border/50" : ""}`}>
+                  <div className="min-w-0">
                     <p className="text-xs font-mono text-muted truncate">{profile.email || profile.id}</p>
+                    {profile.is_admin && <span className="text-[10px] font-mono text-accent">admin</span>}
                   </div>
                   <input type="text" value={editingName[profile.id] || ""}
                     onChange={e => setEditingName(n => ({ ...n, [profile.id]: e.target.value }))}
                     placeholder="Display name"
-                    className="w-44 px-3 py-2 rounded-lg border border-border bg-paper text-ink text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"/>
+                    className="px-3 py-2 rounded-lg border border-border bg-paper text-ink text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"/>
                   <button onClick={() => handleSaveName(profile.id)}
                     className="text-xs font-mono px-3 py-2 bg-ink text-paper rounded-lg hover:bg-ink/90 transition-all whitespace-nowrap">Save</button>
+                  {/* Admin toggle */}
+                  <div className="flex justify-center">
+                    <button
+                      onClick={() => handleToggleAdmin(profile.id, profile.is_admin)}
+                      disabled={profile.email === SUPER_ADMIN}
+                      title={profile.email === SUPER_ADMIN ? "Super admin — cannot be changed" : profile.is_admin ? "Remove admin access" : "Grant admin access"}
+                      className={`w-10 h-6 rounded-full transition-all relative ${profile.is_admin ? "bg-accent" : "bg-border"} ${profile.email === "chris.shepherd@jympartnership.co.uk" ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:opacity-80"}`}>
+                      <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${profile.is_admin ? "left-5" : "left-1"}`}/>
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
