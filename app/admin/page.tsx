@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
-const ADMIN_EMAIL = "chris.shepherd@jympartnership.co.uk";
+const ADMIN_EMAILS = ["chris.shepherd@jympartnership.co.uk"];
 
 type Client = { id: string; name: string; sort_order: number };
 type Entry = { id: string; date: string; client: string; hours: number; user_id: string; user_email: string };
@@ -82,7 +82,7 @@ export default function AdminPage() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) { router.push("/login"); return; }
-      if (session.user.email !== ADMIN_EMAIL) { router.push("/dashboard"); return; }
+      if (!ADMIN_EMAILS.includes(session.user.email ?? "")) { router.push("/dashboard"); return; }
       fetchAll();
     });
   }, [supabase, router, fetchAll]);
