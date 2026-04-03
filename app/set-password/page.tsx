@@ -17,8 +17,12 @@ export default function SetPasswordPage() {
     if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
     if (password !== confirm) { setError("Passwords do not match."); return; }
     setLoading(true);
-    const { error } = await supabase.auth.updateUser({ password });
+    const { error, data } = await supabase.auth.updateUser({ password });
     if (error) { setError(error.message); setLoading(false); return; }
+    // Create profile row so user appears in admin page immediately
+    if (data?.user) {
+      await supabase.from("profiles").upsert({ id: data.user.id }, { onConflict: "id", ignoreDuplicates: true } as any);
+    }
     router.push("/dashboard");
   }
 
