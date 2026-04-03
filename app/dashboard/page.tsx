@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
-const ADMIN_EMAIL = "chris.shepherd@jympartnership.co.uk";
+const ADMIN_EMAILS = ["chris.shepherd@jympartnership.co.uk"];
 
 type Entry = { id: string; date: string; client: string; hours: number; user_id: string };
 type Client = { id: string; name: string; sort_order: number };
@@ -177,7 +177,7 @@ export default function Dashboard() {
     .map(c => ({ name: c.name, hours: entries.filter(e => e.client === c.name).reduce((s, e) => s + e.hours, 0) }))
     .filter(c => c.hours > 0);
   const maxHours = Math.max(...clientTotals.map(c => c.hours), 1);
-  const isAdmin = user?.email === ADMIN_EMAIL;
+  const isAdmin = ADMIN_EMAILS.includes(user?.email ?? "");
 
   const calWeeks = getCalendarMonth(calMonth.year, calMonth.month);
   const calMonthLabel = new Date(calMonth.year, calMonth.month, 1)
