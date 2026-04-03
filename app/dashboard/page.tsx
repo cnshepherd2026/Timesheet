@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
-const ADMIN_EMAILS = ["chris.shepherd@jympartnership.co.uk"];
+const SUPER_ADMIN = "chris.shepherd@jympartnership.co.uk";
 
 type Entry = { id: string; date: string; client: string; hours: number; user_id: string };
 type Client = { id: string; name: string; sort_order: number };
@@ -54,6 +54,7 @@ export default function Dashboard() {
   const [editId, setEditId] = useState<string | null>(null);
   const [filterClient, setFilterClient] = useState("All");
   const [success, setSuccess] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
   const [calMonth, setCalMonth] = useState(() => {
     const n = new Date();
     return { year: n.getFullYear(), month: n.getMonth() };
@@ -89,6 +90,13 @@ export default function Dashboard() {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) { router.push("/login"); return; }
       setUser({ email: session.user.email, id: session.user.id });
+      // Check admin status from profile or super admin email
+      if (session.user.email === SUPER_ADMIN) {
+        setIsAdmin(true);
+      } else {
+        const { data: profile } = await supabase.from("profiles").select("is_admin").eq("id", session.user.id).single();
+        setIsAdmin(profile?.is_admin || false);
+      }
       fetchClients();
       fetchEntries(session.user.id);
     });
@@ -177,7 +185,7 @@ export default function Dashboard() {
     .map(c => ({ name: c.name, hours: entries.filter(e => e.client === c.name).reduce((s, e) => s + e.hours, 0) }))
     .filter(c => c.hours > 0);
   const maxHours = Math.max(...clientTotals.map(c => c.hours), 1);
-  const isAdmin = ADMIN_EMAILS.includes(user?.email ?? "");
+
 
   const calWeeks = getCalendarMonth(calMonth.year, calMonth.month);
   const calMonthLabel = new Date(calMonth.year, calMonth.month, 1)
