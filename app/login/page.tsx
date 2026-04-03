@@ -23,16 +23,9 @@ function LoginForm() {
     // Handle hash fragment tokens from Supabase (recovery/invite)
     const hash = window.location.hash;
     if (hash.includes("type=recovery") || hash.includes("type=invite")) {
-      // Extract tokens and set session, then redirect to set-password
-      const params = new URLSearchParams(hash.replace("#", ""));
-      const access_token = params.get("access_token");
-      const refresh_token = params.get("refresh_token");
-      if (access_token && refresh_token) {
-        supabase.auth.setSession({ access_token, refresh_token }).then(() => {
-          window.history.replaceState(null, "", window.location.pathname);
-          router.push("/set-password");
-        });
-      }
+      // Redirect to set-password WITH the hash so it can handle the session itself
+      router.push("/set-password" + hash);
+      return;
     } else if (hash.includes("error=access_denied") || hash.includes("otp_expired") || hash.includes("error_code=")) {
       setError("This invite link has expired or is invalid. Please ask your administrator to resend the invite.");
       window.history.replaceState(null, "", window.location.pathname);
