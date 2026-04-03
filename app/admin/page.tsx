@@ -9,6 +9,13 @@ type Client = { id: string; name: string; sort_order: number };
 type Entry = { id: string; date: string; client: string; hours: number; user_id: string; user_email: string };
 type Profile = { id: string; display_name: string | null; email: string };
 
+function localDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 function targetHours(date: Date): number {
   const day = date.getDay();
   if (day === 0 || day === 6) return 0;
@@ -150,9 +157,9 @@ export default function AdminPage() {
   function getUserDayStatus(userId: string, date: Date): "green" | "red" | "future" | "weekend" {
     const target = targetHours(date);
     if (target === 0) return "weekend";
-    const today = new Date(); today.setHours(23, 59, 59);
-    if (date > today) return "future";
-    const key = date.toISOString().split("T")[0];
+    const todayStr = localDateKey(new Date());
+    const key = localDateKey(date);
+    if (key > todayStr) return "future";
     const logged = (hoursByUserDate[userId] || {})[key] || 0;
     return logged >= target ? "green" : "red";
   }
@@ -266,7 +273,7 @@ export default function AdminPage() {
                   <div className="text-sm font-body text-ink truncate">{user.display_name || user.email || user.id}</div>
                   {attendWeekDays.map(d => {
                     const status = getUserDayStatus(user.id, d);
-                    const key = d.toISOString().split("T")[0];
+                    const key = localDateKey(d);
                     const logged = (hoursByUserDate[user.id] || {})[key] || 0;
                     const target = targetHours(d);
                     let cell = <div className="w-10 h-10 mx-auto rounded-lg bg-border/15" />;
