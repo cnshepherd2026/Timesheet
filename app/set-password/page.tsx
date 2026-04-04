@@ -58,7 +58,7 @@ export default function SetPasswordPage() {
                 <rect x="9" y="9" width="5" height="5" fill="#F5F2EB"/>
               </svg>
             </div>
-            <span className="font-display font-bold text-lg tracking-tight">Timesheet</span>
+            <span className="font-display font-bold text-lg tracking-tight">JYM Timesheet</span>
           </div>
           <h1 className="font-display text-3xl font-bold text-ink leading-tight">Set your password</h1>
           <p className="mt-2 text-sm text-muted">Choose a password to access your account.</p>
