@@ -215,7 +215,7 @@ export default function Dashboard() {
                 <rect x="9" y="9" width="5" height="5" fill="#F5F2EB"/>
               </svg>
             </div>
-            <span className="font-display font-bold text-base">Timesheet</span>
+            <span className="font-display font-bold text-base">JYM Timesheet</span>
           </div>
           <div className="flex items-center gap-4">
             <span className="text-xs text-muted font-mono hidden sm:block">{user?.email}</span>
