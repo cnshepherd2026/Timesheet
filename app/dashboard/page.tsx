@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
@@ -56,6 +56,16 @@ export default function Dashboard() {
   const [success, setSuccess] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [entriesView, setEntriesView] = useState<"list" | "week">("week");
+  const SECTIONS = ["log", "stats", "calendar", "breakdown", "entries"] as const;
+  type SectionId = typeof SECTIONS[number];
+  const [sectionOrder, setSectionOrder] = useState<SectionId[]>(() => {
+    try {
+      const saved = typeof window !== "undefined" ? localStorage.getItem("jym-section-order") : null;
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return ["log", "stats", "calendar", "breakdown", "entries"];
+  });
+  const dragSectionItem = useRef<number | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [calMonth, setCalMonth] = useState(() => {
     const n = new Date();
@@ -198,6 +208,21 @@ export default function Dashboard() {
   const greenDays = workDays.filter(d => getDayStatus(d) === "green").length;
   const redDays = workDays.filter(d => getDayStatus(d) === "red").length;
 
+  function handleSectionDragStart(index: number) { dragSectionItem.current = index; }
+  function handleSectionDragEnter(index: number) {
+    if (dragSectionItem.current === null || dragSectionItem.current === index) return;
+    const newOrder = [...sectionOrder];
+    const dragged = newOrder[dragSectionItem.current];
+    newOrder.splice(dragSectionItem.current, 1);
+    newOrder.splice(index, 0, dragged);
+    dragSectionItem.current = index;
+    setSectionOrder(newOrder);
+  }
+  function handleSectionDragEnd() {
+    dragSectionItem.current = null;
+    try { localStorage.setItem("jym-section-order", JSON.stringify(sectionOrder)); } catch {}
+  }
+
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="font-mono text-sm text-muted animate-pulse">Loading your timesheet…</div>
@@ -230,7 +255,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-6 py-10 space-y-10">
+      <main className="max-w-5xl mx-auto px-6 py-10">
 
         {/* Title */}
         <div className="animate-fade-up">
@@ -280,8 +305,28 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ── LOG HOURS FORM — always visible ── */}
-        <div className="bg-card border border-border rounded-2xl p-7 shadow-sm animate-fade-up">
+        {sectionOrder.map((sectionId, idx) => {
+          const dragProps = {
+            draggable: true,
+            onDragStart: () => handleSectionDragStart(idx),
+            onDragEnter: () => handleSectionDragEnter(idx),
+            onDragEnd: handleSectionDragEnd,
+            onDragOver: (e: React.DragEvent) => e.preventDefault(),
+          };
+          const handle = (
+            <div className="absolute -left-7 top-4 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing hidden lg:flex">
+              <svg width="10" height="16" viewBox="0 0 10 16" fill="none" className="text-muted/30">
+                <circle cx="3" cy="2" r="1.5" fill="currentColor"/><circle cx="7" cy="2" r="1.5" fill="currentColor"/>
+                <circle cx="3" cy="6" r="1.5" fill="currentColor"/><circle cx="7" cy="6" r="1.5" fill="currentColor"/>
+                <circle cx="3" cy="10" r="1.5" fill="currentColor"/><circle cx="7" cy="10" r="1.5" fill="currentColor"/>
+                <circle cx="3" cy="14" r="1.5" fill="currentColor"/><circle cx="7" cy="14" r="1.5" fill="currentColor"/>
+              </svg>
+            </div>
+          );
+          if (sectionId === "log") return (
+            <div key="log" {...dragProps} className="group relative">
+              {handle}
+              <div className="bg-card border border-border rounded-2xl p-7 shadow-sm">
           <h2 className="font-display text-lg font-bold mb-6">{editId ? "Edit entry" : "Log hours"}</h2>
           {clients.length === 0 ? (
             <p className="text-sm text-muted font-body">
@@ -322,10 +367,13 @@ export default function Dashboard() {
               </div>
             </form>
           )}
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 animate-fade-up delay-100">
+              </div>
+            </div>
+          );
+          if (sectionId === "stats") return (
+            <div key="stats" {...dragProps} className="group relative">
+              {handle}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           <div className="bg-card border border-border rounded-2xl p-5">
             <p className="text-xs font-mono text-muted uppercase tracking-widest mb-1">Total hours</p>
             <p className="font-display text-3xl font-bold">{totalHours.toFixed(1)}</p>
@@ -348,13 +396,16 @@ export default function Dashboard() {
               }).reduce((s, e) => s + e.hours, 0).toFixed(1)}h
             </p>
           </div>
-        </div>
-
-        {/* ── ATTENDANCE CALENDAR ── */}
-        <div className="bg-card border border-border rounded-2xl p-7 animate-fade-up delay-200">
+              </div>
+            </div>
+          );
+          if (sectionId === "calendar") return (
+            <div key="calendar" {...dragProps} className="group relative">
+              {handle}
+              <div className="bg-card border border-border rounded-2xl p-7">
           <div className="flex items-center justify-between mb-5">
             <div>
-              <h2 className="font-display text-sm font-bold uppercase tracking-widest text-muted">Attendance</h2>
+              <h2 className="font-display text-sm font-bold uppercase tracking-widest text-muted">Month View</h2>
               <p className="font-display font-bold text-lg mt-0.5">{calMonthLabel}</p>
             </div>
             <div className="flex items-center gap-1">
@@ -431,11 +482,13 @@ export default function Dashboard() {
             </div>
             <span className="text-xs font-mono text-muted">Mon–Thu 8h · Fri 7h</span>
           </div>
-        </div>
-
-        {/* Activity breakdown */}
-        {clientTotals.length > 0 && (
-          <div className="bg-card border border-border rounded-2xl p-7 animate-fade-up delay-200">
+              </div>
+            </div>
+          );
+          if (sectionId === "breakdown") return clientTotals.length === 0 ? null : (
+            <div key="breakdown" {...dragProps} className="group relative">
+              {handle}
+              <div className="bg-card border border-border rounded-2xl p-7">
             <h2 className="font-display text-sm font-bold uppercase tracking-widest text-muted mb-6">Hours by activity</h2>
             <div className="space-y-3">
               {clientTotals.sort((a, b) => b.hours - a.hours).map(c => (
@@ -448,11 +501,13 @@ export default function Dashboard() {
                 </div>
               ))}
             </div>
-          </div>
-        )}
-
-        {/* Entries — list or weekly view */}
-        <div className="animate-fade-up delay-300">
+              </div>
+            </div>
+          );
+          if (sectionId === "entries") return (
+            <div key="entries" {...dragProps} className="group relative">
+              {handle}
+              <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-display text-lg font-bold">Entries</h2>
             <div className="flex items-center gap-3">
@@ -628,7 +683,11 @@ export default function Dashboard() {
               )}
             </>
           )}
-        </div>
+              </div>
+            </div>
+          );
+          return null;
+        })}
       </main>
     </div>
   );
