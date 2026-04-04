@@ -234,7 +234,7 @@ export default function AdminPage() {
                 <rect x="9" y="9" width="5" height="5" fill="#F5F2EB"/>
               </svg>
             </div>
-            <span className="font-display font-bold text-base">Timesheet</span>
+            <span className="font-display font-bold text-base">JYM Timesheet</span>
             <span className="text-xs font-mono text-muted bg-border/60 px-2 py-0.5 rounded-md">Admin</span>
           </div>
           <button onClick={() => router.push("/dashboard")} className="text-xs font-mono text-muted hover:text-ink transition-colors">← Back to timesheet</button>
