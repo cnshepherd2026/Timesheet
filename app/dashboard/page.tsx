@@ -340,7 +340,9 @@ export default function Dashboard() {
                 const monday = new Date(now);
                 monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
                 monday.setHours(0, 0, 0, 0);
-                return e.date >= localDateKey(monday);
+                const sunday = new Date(monday);
+                sunday.setDate(monday.getDate() + 6);
+                return e.date >= localDateKey(monday) && e.date <= localDateKey(sunday);
               }).reduce((s, e) => s + e.hours, 0).toFixed(1)}h
             </p>
           </div>
