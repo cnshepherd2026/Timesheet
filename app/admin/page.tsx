@@ -7,7 +7,7 @@ const SUPER_ADMIN = "chris.shepherd@jympartnership.co.uk";
 
 type Client = { id: string; name: string; sort_order: number };
 type Entry = { id: string; date: string; client: string; hours: number; user_id: string; user_email: string };
-type Profile = { id: string; display_name: string | null; email: string; is_admin: boolean };
+type Profile = { id: string; display_name: string | null; email: string; is_admin: boolean; created_at?: string };
 
 function localDateKey(date: Date): string {
   const y = date.getFullYear();
@@ -50,28 +50,47 @@ export default function AdminPage() {
   const [filterMonth, setFilterMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [editingName, setEditingName] = useState<Record<string, string>>({});
   const [attendWeekOffset, setAttendWeekOffset] = useState(0);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviting, setInviting] = useState(false);
+  const [confirmDeleteUser, setConfirmDeleteUser] = useState<Profile | null>(null);
 
   const dragItem = useRef<number | null>(null);
   const dragOverItem = useRef<number | null>(null);
 
   const fetchAll = useCallback(async () => {
-    const [{ data: clientData }, { data: entryData }, { data: profileData }] = await Promise.all([
+    const [{ data: clientData }, { data: entryData }, { data: profileData }, usersRes] = await Promise.all([
       supabase.from("clients").select("*").order("sort_order").order("name"),
       supabase.from("timesheet_entries").select("*").order("date", { ascending: false }),
       supabase.from("profiles").select("*"),
+      fetch("/api/users"),
     ]);
     setClients(clientData || []);
     setEntries(entryData || []);
 
+    // Build email map from auth users API (authoritative source)
+    const emailMap: Record<string, string> = {};
+    if (usersRes.ok) {
+      const usersData = await usersRes.json();
+      (usersData.users || []).forEach((u: any) => { emailMap[u.id] = u.email || ""; });
+    }
+
     const profileMap: Record<string, Profile> = {};
     (profileData || []).forEach((p: any) => {
-      profileMap[p.id] = { id: p.id, display_name: p.display_name, email: "", is_admin: p.is_admin || false };
+      profileMap[p.id] = { id: p.id, display_name: p.display_name, email: emailMap[p.id] || "", is_admin: p.is_admin || false };
     });
+    // Also add any users from auth that don't have a profile row yet
+    Object.entries(emailMap).forEach(([id, email]) => {
+      if (!profileMap[id]) profileMap[id] = { id, display_name: null, email, is_admin: false };
+      else if (!profileMap[id].email) profileMap[id].email = email;
+    });
+    // Fill in from entries as fallback
     (entryData || []).forEach((e: any) => {
-      if (profileMap[e.user_id]) profileMap[e.user_id].email = e.user_email || "";
-      else profileMap[e.user_id] = { id: e.user_id, display_name: null, email: e.user_email || e.user_id, is_admin: false };
+      if (profileMap[e.user_id] && !profileMap[e.user_id].email) {
+        profileMap[e.user_id].email = e.user_email || "";
+      }
     });
-    const profileList = Object.values(profileMap);
+
+    const profileList = Object.values(profileMap).sort((a, b) => a.email.localeCompare(b.email));
     setProfiles(profileList);
     const nameMap: Record<string, string> = {};
     profileList.forEach(p => { nameMap[p.id] = p.display_name || ""; });
@@ -125,6 +144,35 @@ export default function AdminPage() {
     setSuccess(!currentValue ? "Admin access granted!" : "Admin access removed!");
     setTimeout(() => setSuccess(""), 3000);
     fetchAll();
+  }
+
+  async function handleInviteUser(e: React.FormEvent) {
+    e.preventDefault();
+    if (!inviteEmail.trim()) return;
+    setInviting(true);
+    const res = await fetch("/api/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: inviteEmail.trim() }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setSuccess("Error: " + data.error); }
+    else { setSuccess("Invite sent to " + inviteEmail); setInviteEmail(""); await fetchAll(); }
+    setInviting(false);
+    setTimeout(() => setSuccess(""), 4000);
+  }
+
+  async function handleDeleteUser(userId: string) {
+    const res = await fetch("/api/users", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setSuccess("Error: " + data.error); }
+    else { setSuccess("User removed."); await fetchAll(); }
+    setConfirmDeleteUser(null);
+    setTimeout(() => setSuccess(""), 3000);
   }
 
   function handleDragStart(index: number) { dragItem.current = index; }
@@ -407,11 +455,45 @@ export default function AdminPage() {
           )}
         </section>
 
+        {/* Confirm delete user modal */}
+        {confirmDeleteUser && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-ink/20 backdrop-blur-sm" onClick={() => setConfirmDeleteUser(null)}>
+            <div className="bg-card border border-border rounded-2xl p-8 shadow-xl w-full max-w-sm animate-fade-up" onClick={e => e.stopPropagation()}>
+              <h2 className="font-display text-xl font-bold mb-2">Remove user?</h2>
+              <p className="text-sm text-muted mb-6">This will permanently delete <span className="font-medium text-ink">{confirmDeleteUser.email}</span> and all their timesheet entries. This cannot be undone.</p>
+              <div className="flex gap-3">
+                <button onClick={() => handleDeleteUser(confirmDeleteUser.id)}
+                  className="flex-1 py-3 bg-accent text-white font-display font-semibold text-sm rounded-xl hover:bg-accent/90 transition-all">
+                  Yes, remove
+                </button>
+                <button onClick={() => setConfirmDeleteUser(null)}
+                  className="px-4 py-3 border border-border text-muted text-sm font-body rounded-xl hover:border-ink hover:text-ink transition-all">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ── MANAGE PEOPLE ── */}
         <section className="border-t border-border pt-10 space-y-6 animate-fade-up">
           <div>
             <h2 className="font-display text-2xl font-bold text-ink">Manage People</h2>
-            <p className="text-sm text-muted mt-1">Set display names and admin access for each team member.</p>
+            <p className="text-sm text-muted mt-1">Invite team members, set display names, and manage admin access.</p>
+          </div>
+
+          {/* Invite user */}
+          <div className="bg-card border border-border rounded-2xl p-7">
+            <h3 className="font-display text-xs font-bold uppercase tracking-widest text-muted mb-5">Invite new user</h3>
+            <form onSubmit={handleInviteUser} className="flex gap-3">
+              <input type="email" required value={inviteEmail} onChange={e => setInviteEmail(e.target.value)}
+                placeholder="colleague@email.com"
+                className="flex-1 px-4 py-3 rounded-xl border border-border bg-paper text-ink placeholder-muted/50 text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"/>
+              <button type="submit" disabled={inviting}
+                className="px-6 py-3 bg-ink text-paper font-display font-semibold text-sm rounded-xl hover:bg-ink/90 active:scale-95 transition-all disabled:opacity-50 whitespace-nowrap">
+                {inviting ? "Sending…" : "Send invite"}
+              </button>
+            </form>
           </div>
           {profiles.length === 0 ? (
             <div className="bg-card border border-border rounded-2xl p-10 text-center">
@@ -420,14 +502,14 @@ export default function AdminPage() {
           ) : (
             <div className="bg-card border border-border rounded-2xl overflow-hidden">
               {/* Column headers */}
-              <div className="grid grid-cols-[1fr_180px_80px_60px] gap-3 px-6 py-2 border-b border-border bg-paper/50">
+              <div className="grid grid-cols-[1fr_180px_80px_60px_32px] gap-3 px-6 py-2 border-b border-border bg-paper/50">
                 <div className="text-xs font-mono text-muted uppercase tracking-widest">Email</div>
                 <div className="text-xs font-mono text-muted uppercase tracking-widest">Display name</div>
                 <div className="text-xs font-mono text-muted uppercase tracking-widest"></div>
                 <div className="text-xs font-mono text-muted uppercase tracking-widest text-center">Admin</div>
               </div>
               {profiles.map((profile, i) => (
-                <div key={profile.id} className={`grid grid-cols-[1fr_180px_80px_60px] gap-3 items-center px-6 py-3 ${i < profiles.length - 1 ? "border-b border-border/50" : ""}`}>
+                <div key={profile.id} className={`grid grid-cols-[1fr_180px_80px_60px_32px] gap-3 items-center px-6 py-3 ${i < profiles.length - 1 ? "border-b border-border/50" : ""}`}>
                   <div className="min-w-0">
                     <p className="text-xs font-mono text-muted truncate">{profile.email || profile.id}</p>
                     {profile.is_admin && <span className="text-[10px] font-mono text-accent">admin</span>}
@@ -448,6 +530,13 @@ export default function AdminPage() {
                       <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${profile.is_admin ? "left-5" : "left-1"}`}/>
                     </button>
                   </div>
+                  {/* Delete user */}
+                  {profile.email !== SUPER_ADMIN && (
+                    <button onClick={() => setConfirmDeleteUser(profile)}
+                      className="text-xs font-mono text-muted hover:text-accent transition-colors ml-1" title="Remove user">
+                      ✕
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
