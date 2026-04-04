@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Timesheet — Track Your Hours",
-  description: "Internal timesheet app for logging project hours",
+  title: "JYM Timesheet",
+  description: "JYM Partnership timesheet",
 };
 
 export default function RootLayout({
