@@ -62,16 +62,8 @@ function LoginForm() {
   return (
     <div className="relative w-full max-w-sm animate-fade-up">
       <div className="mb-10 text-center">
-        <div className="inline-flex items-center gap-2 mb-6">
-          <div className="w-8 h-8 bg-ink rounded flex items-center justify-center">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <rect x="2" y="2" width="5" height="5" fill="#F5F2EB"/>
-              <rect x="9" y="2" width="5" height="5" fill="#E8572A"/>
-              <rect x="2" y="9" width="5" height="5" fill="#E8572A"/>
-              <rect x="9" y="9" width="5" height="5" fill="#F5F2EB"/>
-            </svg>
-          </div>
-          <span className="font-display font-bold text-lg tracking-tight">JYM Timesheet</span>
+        <div className="mb-6">
+          <img src="/jym-logo.jpg" alt="JYM Partnership" className="h-14 w-auto object-contain mx-auto"/>
         </div>
         <h1 className="font-display text-3xl font-bold text-ink leading-tight">
           {showForgot ? "Reset password" : "Welcome back"}
