@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  darkMode: "class",
   content: [
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -12,12 +13,12 @@ module.exports = {
         mono: ["'DM Mono'", "monospace"],
       },
       colors: {
-        ink: "#0D0D0D",
-        paper: "#F5F2EB",
+        ink: "var(--color-ink)",
+        paper: "var(--color-paper)",
         accent: "#E8572A",
-        muted: "#8C8680",
-        border: "#D9D4CC",
-        card: "#FDFAF5",
+        muted: "var(--color-muted)",
+        border: "var(--color-border)",
+        card: "var(--color-card)",
       },
     },
   },
