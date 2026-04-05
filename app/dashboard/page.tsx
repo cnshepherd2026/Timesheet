@@ -288,8 +288,8 @@ export default function Dashboard() {
             <div className={`w-9 h-5 rounded-full transition-all relative ${darkMode ? "bg-ink" : "bg-border"}`}>
               <span className={`absolute top-0.5 w-4 h-4 rounded-full shadow transition-all ${darkMode ? "left-4 bg-paper" : "left-0.5 bg-white"}`}/>
             </div>
-            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" className={darkMode ? "text-accent" : "text-muted"}>
-              <path d="M12 8.5A6 6 0 015.5 2a6 6 0 100 10 6 6 0 006.5-3.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" className={darkMode ? "text-accent" : "text-muted"}>
+              <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </button>
         </div>
