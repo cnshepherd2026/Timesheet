@@ -241,15 +241,6 @@ export default function AdminPage() {
     return count;
   }
 
-  // Users who haven't logged in more than threshold working days
-  const inactiveUsers = allUsers.map(u => {
-    const last = lastLoggedByUser[u.id];
-    if (!last) return { ...u, daysSince: 999, lastDate: null };
-    const days = workingDaysSince(last);
-    return { ...u, daysSince: days, lastDate: last };
-  }).filter(u => u.daysSince >= inactiveThreshold)
-    .sort((a, b) => b.daysSince - a.daysSince);
-
   function getUserDayStatus(userId: string, date: Date): "green" | "red" | "future" | "weekend" {
     const target = targetHours(date);
     if (target === 0) return "weekend";
@@ -296,6 +287,15 @@ export default function AdminPage() {
 
   // All users who have a profile (show everyone, even if no entries yet)
   const allUsers = profiles;
+
+  // Users who haven't logged in more than threshold working days
+  const inactiveUsers = allUsers.map(u => {
+    const last = lastLoggedByUser[u.id];
+    if (!last) return { ...u, daysSince: 999, lastDate: null as string | null };
+    const days = workingDaysSince(last);
+    return { ...u, daysSince: days, lastDate: last as string | null };
+  }).filter(u => u.daysSince >= inactiveThreshold)
+    .sort((a, b) => b.daysSince - a.daysSince);
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
