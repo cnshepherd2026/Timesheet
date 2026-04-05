@@ -2,20 +2,36 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Light mode (default) */
+:root {
+  --color-ink: #0D0D0D;
+  --color-paper: #F5F2EB;
+  --color-muted: #8C8680;
+  --color-border: #D9D4CC;
+  --color-card: #FDFAF5;
+}
+
+/* Dark mode */
+.dark {
+  --color-ink: #F0EDE8;
+  --color-paper: #1A1917;
+  --color-muted: #6B6660;
+  --color-border: #2E2C29;
+  --color-card: #211F1C;
+}
+
 @layer base {
-  * {
-    box-sizing: border-box;
-  }
+  * { box-sizing: border-box; }
   body {
     min-height: 100vh;
-    background-color: #F5F2EB;
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 }
 
 @layer utilities {
-  .grain {
-    position: relative;
-  }
+  .grain { position: relative; }
   .grain::after {
     content: "";
     position: absolute;
@@ -27,6 +43,7 @@
   }
 }
 
+/* Animations */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(16px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -35,12 +52,8 @@
   from { opacity: 0; }
   to   { opacity: 1; }
 }
-.animate-fade-up {
-  animation: fadeUp 0.5s ease forwards;
-}
-.animate-fade-in {
-  animation: fadeIn 0.4s ease forwards;
-}
+.animate-fade-up { animation: fadeUp 0.5s ease forwards; }
+.animate-fade-in { animation: fadeIn 0.4s ease forwards; }
 .delay-100 { animation-delay: 0.1s; opacity: 0; }
 .delay-200 { animation-delay: 0.2s; opacity: 0; }
 .delay-300 { animation-delay: 0.3s; opacity: 0; }
