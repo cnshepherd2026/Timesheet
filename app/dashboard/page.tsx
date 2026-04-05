@@ -55,7 +55,21 @@ export default function Dashboard() {
   const [filterClient, setFilterClient] = useState("All");
   const [success, setSuccess] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
-  const [entriesView, setEntriesView] = useState<"list" | "week">("week");
+  const [entriesView, setEntriesView] = useState<"list" | "week" | "month">("week");
+  const [darkMode, setDarkMode] = useState(() => {
+    try { return typeof window !== "undefined" && localStorage.getItem("jym-dark-mode") === "true"; }
+    catch { return false; }
+  });
+
+  function toggleDarkMode() {
+    const next = !darkMode;
+    setDarkMode(next);
+    try {
+      localStorage.setItem("jym-dark-mode", String(next));
+      if (next) document.documentElement.classList.add("dark");
+      else document.documentElement.classList.remove("dark");
+    } catch {}
+  }
   const SECTIONS = ["log", "stats", "calendar", "breakdown", "entries"] as const;
   type SectionId = typeof SECTIONS[number];
   const [sectionOrder, setSectionOrder] = useState<SectionId[]>(() => {
@@ -254,6 +268,14 @@ export default function Dashboard() {
             {isAdmin && (
               <button onClick={() => router.push("/admin")} className="text-xs font-mono text-accent hover:text-accent/80 transition-colors">Admin</button>
             )}
+            <button onClick={toggleDarkMode} title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-muted hover:text-ink transition-colors">
+              {darkMode ? (
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="3" stroke="currentColor" strokeWidth="1.4"/><path d="M7 1v1M7 12v1M1 7h1M12 7h1M2.9 2.9l.7.7M10.4 10.4l.7.7M2.9 11.1l.7-.7M10.4 3.6l.7-.7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M12 8.5A6 6 0 015.5 2a6 6 0 100 10 6 6 0 006.5-3.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+              )}
+            </button>
             <button onClick={() => setShowChangePassword(true)} className="text-xs font-mono text-muted hover:text-ink transition-colors">Change password</button>
             <button onClick={handleSignOut} className="text-xs font-mono text-muted hover:text-accent transition-colors">Sign out</button>
           </div>
@@ -523,6 +545,10 @@ export default function Dashboard() {
                   className={`text-xs font-mono px-3 py-1.5 transition-colors ${entriesView === "week" ? "bg-ink text-paper" : "bg-paper text-muted hover:text-ink"}`}>
                   Week
                 </button>
+                <button onClick={() => setEntriesView("month")}
+                  className={`text-xs font-mono px-3 py-1.5 transition-colors ${entriesView === "month" ? "bg-ink text-paper" : "bg-paper text-muted hover:text-ink"}`}>
+                  Month
+                </button>
                 <button onClick={() => setEntriesView("list")}
                   className={`text-xs font-mono px-3 py-1.5 transition-colors ${entriesView === "list" ? "bg-ink text-paper" : "bg-paper text-muted hover:text-ink"}`}>
                   List
@@ -545,7 +571,66 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {entriesView === "week" ? (() => {
+          {entriesView === "month" ? (() => {
+            // Month grid view — shows all days with entries
+            const weeks = getCalendarMonth(calMonth.year, calMonth.month);
+            const monthTotal = monthEntries.reduce((s, e) => s + e.hours, 0);
+            return (
+              <div className="bg-card border border-border rounded-2xl overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-paper/40">
+                  <span className="font-display font-bold text-sm">{calMonthLabel}</span>
+                  <span className="text-xs font-mono font-medium text-ink">{monthTotal.toFixed(1)}h total</span>
+                </div>
+                {/* Day headers */}
+                <div className="grid grid-cols-7 border-b border-border">
+                  {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d => (
+                    <div key={d} className={`text-center text-xs font-mono uppercase tracking-wider py-2 ${d === "Sat" || d === "Sun" ? "text-muted/30" : "text-muted"}`}>{d}</div>
+                  ))}
+                </div>
+                {/* Weeks */}
+                <div>
+                  {weeks.map((week, wi) => (
+                    <div key={wi} className={`grid grid-cols-7 ${wi < weeks.length - 1 ? "border-b border-border/40" : ""}`}>
+                      {week.map((date, di) => {
+                        if (!date) return <div key={di} className="min-h-[80px] border-r border-border/30 last:border-r-0 bg-paper/20"/>;
+                        const key = localDateKey(date);
+                        const dayEntries = monthEntries.filter(e => e.date === key);
+                        const dayTotal = dayEntries.reduce((s, e) => s + e.hours, 0);
+                        const isToday = key === todayKey();
+                        const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+                        const target = targetHours(date);
+                        const onTarget = target > 0 && dayTotal >= target;
+                        const isPast = key < todayKey();
+                        return (
+                          <div key={di} className={`min-h-[80px] border-r border-border/30 last:border-r-0 p-1.5 flex flex-col ${isWeekend ? "bg-paper/20" : ""} ${isToday ? "bg-accent/5" : ""}`}>
+                            <div className={`text-xs font-mono mb-1 w-6 h-6 flex items-center justify-center rounded-full ${isToday ? "bg-accent text-white font-semibold" : isWeekend ? "text-muted/30" : "text-muted"}`}>
+                              {date.getDate()}
+                            </div>
+                            <div className="flex-1 space-y-0.5">
+                              {dayEntries.map(entry => (
+                                <div key={entry.id}
+                                  onClick={() => startEdit(entry)}
+                                  className="text-[10px] font-mono bg-ink/8 hover:bg-ink/15 rounded px-1.5 py-0.5 truncate cursor-pointer transition-colors leading-tight">
+                                  <span className="text-ink">{entry.client}</span>
+                                  <span className="text-muted ml-1">{entry.hours}h</span>
+                                </div>
+                              ))}
+                            </div>
+                            {dayTotal > 0 && !isWeekend && (
+                              <div className={`text-[9px] font-mono text-right mt-0.5 ${onTarget ? "text-emerald-500" : isPast ? "text-red-400" : "text-muted"}`}>
+                                {dayTotal}h
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })() : entriesView === "week" ? (() => {
             // Calculate week days for current weekOffset
             const now = new Date();
             const monday = new Date(now);
