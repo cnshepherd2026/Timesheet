@@ -268,14 +268,6 @@ export default function Dashboard() {
             {isAdmin && (
               <button onClick={() => router.push("/admin")} className="text-xs font-mono text-accent hover:text-accent/80 transition-colors">Admin</button>
             )}
-            <button onClick={toggleDarkMode} title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
-              className="w-7 h-7 flex items-center justify-center rounded-lg text-muted hover:text-ink transition-colors">
-              {darkMode ? (
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="3" stroke="currentColor" strokeWidth="1.4"/><path d="M7 1v1M7 12v1M1 7h1M12 7h1M2.9 2.9l.7.7M10.4 10.4l.7.7M2.9 11.1l.7-.7M10.4 3.6l.7-.7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-              ) : (
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M12 8.5A6 6 0 015.5 2a6 6 0 100 10 6 6 0 006.5-3.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-              )}
-            </button>
             <button onClick={() => setShowChangePassword(true)} className="text-xs font-mono text-muted hover:text-ink transition-colors">Change password</button>
             <button onClick={handleSignOut} className="text-xs font-mono text-muted hover:text-accent transition-colors">Sign out</button>
           </div>
@@ -284,12 +276,29 @@ export default function Dashboard() {
 
       <main className="max-w-5xl mx-auto px-6 py-10">
 
-        {/* Title */}
-        <div className="animate-fade-up mb-8">
-          <p className="text-xs font-mono text-muted uppercase tracking-widest mb-1">
-            {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
-          </p>
-          <h1 className="font-display text-4xl font-bold text-ink">Your Hours</h1>
+        {/* Title + Dark mode toggle */}
+        <div className="flex items-start justify-between animate-fade-up mb-8">
+          <div>
+            <p className="text-xs font-mono text-muted uppercase tracking-widest mb-1">
+              {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+            </p>
+            <h1 className="font-display text-4xl font-bold text-ink">Your Hours</h1>
+          </div>
+          {/* Dark mode toggle */}
+          <button onClick={toggleDarkMode}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-card hover:border-ink transition-all mt-1"
+            title={darkMode ? "Switch to light mode" : "Switch to dark mode"}>
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" className={darkMode ? "text-muted" : "text-accent"}>
+              <circle cx="7" cy="7" r="3" stroke="currentColor" strokeWidth="1.4"/>
+              <path d="M7 1v1M7 12v1M1 7h1M12 7h1M2.9 2.9l.7.7M10.4 10.4l.7.7M2.9 11.1l.7-.7M10.4 3.6l.7-.7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+            </svg>
+            <div className={`w-9 h-5 rounded-full transition-all relative ${darkMode ? "bg-ink" : "bg-border"}`}>
+              <span className={`absolute top-0.5 w-4 h-4 rounded-full shadow transition-all ${darkMode ? "left-4 bg-paper" : "left-0.5 bg-white"}`}/>
+            </div>
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" className={darkMode ? "text-accent" : "text-muted"}>
+              <path d="M12 8.5A6 6 0 015.5 2a6 6 0 100 10 6 6 0 006.5-3.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+            </svg>
+          </button>
         </div>
 
         {success && (
@@ -537,7 +546,16 @@ export default function Dashboard() {
               {handle}
               <div>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-display text-lg font-bold">Entries <span className="text-sm font-mono font-normal text-muted">— {calMonthLabel}</span></h2>
+            <div className="flex items-center gap-3">
+              <h2 className="font-display text-lg font-bold">Entries</h2>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setCalMonth(m => { const d = new Date(m.year, m.month - 1, 1); return { year: d.getFullYear(), month: d.getMonth() }; })}
+                  className="w-6 h-6 flex items-center justify-center rounded-md border border-border hover:border-ink text-muted hover:text-ink transition-all text-xs">‹</button>
+                <span className="text-sm font-mono text-muted px-1">{calMonthLabel}</span>
+                <button onClick={() => setCalMonth(m => { const d = new Date(m.year, m.month + 1, 1); return { year: d.getFullYear(), month: d.getMonth() }; })}
+                  className="w-6 h-6 flex items-center justify-center rounded-md border border-border hover:border-ink text-muted hover:text-ink transition-all text-xs">›</button>
+              </div>
+            </div>
             <div className="flex items-center gap-3">
               {/* View toggle */}
               <div className="flex rounded-lg border border-border overflow-hidden">
