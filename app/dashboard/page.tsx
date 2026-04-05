@@ -170,6 +170,7 @@ export default function Dashboard() {
   function exportCSV() {
     const rows = [["Date", "Activity", "Hours"]];
     filtered.forEach(e => rows.push([e.date, e.client, String(e.hours)]));
+    // filename includes month
     const csv = rows.map(r => r.map(v => `"${v}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -191,10 +192,14 @@ export default function Dashboard() {
     return logged >= target ? "green" : "red";
   }
 
-  const filtered = filterClient === "All" ? entries : entries.filter(e => e.client === filterClient);
+  // Filter entries by the calendar month
+  const calMonthPrefix = `${String(calMonth.year)}-${String(calMonth.month + 1).padStart(2, "0")}`;
+  const monthEntries = entries.filter(e => e.date.startsWith(calMonthPrefix));
+
+  const filtered = (filterClient === "All" ? monthEntries : monthEntries.filter(e => e.client === filterClient));
   const totalHours = filtered.reduce((s, e) => s + e.hours, 0);
   const clientTotals = clients
-    .map(c => ({ name: c.name, hours: entries.filter(e => e.client === c.name).reduce((s, e) => s + e.hours, 0) }))
+    .map(c => ({ name: c.name, hours: monthEntries.filter(e => e.client === c.name).reduce((s, e) => s + e.hours, 0) }))
     .filter(c => c.hours > 0);
   const maxHours = Math.max(...clientTotals.map(c => c.hours), 1);
 
@@ -376,12 +381,12 @@ export default function Dashboard() {
               {handle}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           <div className="bg-card border border-border rounded-2xl p-5">
-            <p className="text-xs font-mono text-muted uppercase tracking-widest mb-1">Total hours</p>
+            <p className="text-xs font-mono text-muted uppercase tracking-widest mb-1">{calMonthLabel} hours</p>
             <p className="font-display text-3xl font-bold">{totalHours.toFixed(1)}</p>
           </div>
           <div className="bg-card border border-border rounded-2xl p-5">
             <p className="text-xs font-mono text-muted uppercase tracking-widest mb-1">Entries</p>
-            <p className="font-display text-3xl font-bold">{filtered.length}</p>
+            <p className="font-display text-3xl font-bold">{monthEntries.length}</p>
           </div>
           <div className="bg-accent/10 border border-accent/20 rounded-2xl p-5 col-span-2 sm:col-span-1">
             <p className="text-xs font-mono text-accent uppercase tracking-widest mb-1">This week</p>
@@ -510,7 +515,7 @@ export default function Dashboard() {
               {handle}
               <div>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-display text-lg font-bold">Entries</h2>
+            <h2 className="font-display text-lg font-bold">Entries <span className="text-sm font-mono font-normal text-muted">— {calMonthLabel}</span></h2>
             <div className="flex items-center gap-3">
               {/* View toggle */}
               <div className="flex rounded-lg border border-border overflow-hidden">
