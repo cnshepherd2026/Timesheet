@@ -63,7 +63,7 @@ export default function Dashboard() {
       const saved = typeof window !== "undefined" ? localStorage.getItem("jym-section-order") : null;
       if (saved) return JSON.parse(saved);
     } catch {}
-    return ["log", "stats", "calendar", "breakdown", "entries"];
+    return ["log", "entries", "stats", "calendar", "breakdown"];
   });
   const dragSectionItem = useRef<number | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
@@ -258,7 +258,7 @@ export default function Dashboard() {
       <main className="max-w-5xl mx-auto px-6 py-10">
 
         {/* Title */}
-        <div className="animate-fade-up">
+        <div className="animate-fade-up mb-8">
           <p className="text-xs font-mono text-muted uppercase tracking-widest mb-1">
             {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
           </p>
@@ -305,6 +305,7 @@ export default function Dashboard() {
           </div>
         )}
 
+        <div className="space-y-8">
         {sectionOrder.map((sectionId, idx) => {
           const dragProps = {
             draggable: true,
@@ -688,6 +689,7 @@ export default function Dashboard() {
           );
           return null;
         })}
+        </div>
       </main>
     </div>
   );
