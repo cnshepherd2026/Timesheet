@@ -50,6 +50,7 @@ export default function AdminPage() {
   const [filterMonth, setFilterMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [editingName, setEditingName] = useState<Record<string, string>>({});
   const [attendWeekOffset, setAttendWeekOffset] = useState(0);
+  const [inactiveThreshold, setInactiveThreshold] = useState(3);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviting, setInviting] = useState(false);
   const [confirmDeleteUser, setConfirmDeleteUser] = useState<Profile | null>(null);
@@ -216,6 +217,39 @@ export default function AdminPage() {
     hoursByUserDate[e.user_id][e.date] = (hoursByUserDate[e.user_id][e.date] || 0) + e.hours;
   });
 
+  // Last logged date per user (only counting working days)
+  const lastLoggedByUser: Record<string, string> = {};
+  entries.forEach(e => {
+    if (!lastLoggedByUser[e.user_id] || e.date > lastLoggedByUser[e.user_id]) {
+      lastLoggedByUser[e.user_id] = e.date;
+    }
+  });
+
+  // Count working days between two date strings
+  function workingDaysSince(dateStr: string): number {
+    const from = new Date(dateStr + "T12:00:00");
+    const to = new Date();
+    to.setHours(12, 0, 0, 0);
+    let count = 0;
+    const cur = new Date(from);
+    cur.setDate(cur.getDate() + 1); // start counting from day after
+    while (cur <= to) {
+      const day = cur.getDay();
+      if (day !== 0 && day !== 6) count++;
+      cur.setDate(cur.getDate() + 1);
+    }
+    return count;
+  }
+
+  // Users who haven't logged in more than threshold working days
+  const inactiveUsers = allUsers.map(u => {
+    const last = lastLoggedByUser[u.id];
+    if (!last) return { ...u, daysSince: 999, lastDate: null };
+    const days = workingDaysSince(last);
+    return { ...u, daysSince: days, lastDate: last };
+  }).filter(u => u.daysSince >= inactiveThreshold)
+    .sort((a, b) => b.daysSince - a.daysSince);
+
   function getUserDayStatus(userId: string, date: Date): "green" | "red" | "future" | "weekend" {
     const target = targetHours(date);
     if (target === 0) return "weekend";
@@ -312,6 +346,59 @@ export default function AdminPage() {
             </div>
           </div>
           <p className="text-xs font-mono text-muted">{weekLabel}</p>
+
+          {/* Inactive users alert */}
+          <div className="bg-card border border-border rounded-2xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-display font-bold text-ink">Inactive users</span>
+                {inactiveUsers.length > 0 && (
+                  <span className="text-xs font-mono bg-accent/10 text-accent border border-accent/20 px-2 py-0.5 rounded-full">
+                    {inactiveUsers.length} flagged
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-xs font-mono text-muted">
+                <span>Flag after</span>
+                <select value={inactiveThreshold} onChange={e => setInactiveThreshold(Number(e.target.value))}
+                  className="px-2 py-1 rounded-lg border border-border bg-paper text-ink focus:outline-none focus:border-ink transition-all">
+                  <option value={1}>1 day</option>
+                  <option value={2}>2 days</option>
+                  <option value={3}>3 days</option>
+                  <option value={5}>5 days</option>
+                  <option value={10}>10 days</option>
+                </select>
+                <span>without logging</span>
+              </div>
+            </div>
+            {inactiveUsers.length === 0 ? (
+              <div className="flex items-center gap-2 text-sm text-emerald-600 font-mono">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"/>
+                All team members have logged time within the last {inactiveThreshold} working day{inactiveThreshold !== 1 ? "s" : ""}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {inactiveUsers.map(u => (
+                  <div key={u.id} className="flex items-center justify-between py-2.5 px-4 bg-accent/5 border border-accent/15 rounded-xl">
+                    <div className="flex items-center gap-3">
+                      <span className="w-2 h-2 rounded-full bg-accent inline-block shrink-0"/>
+                      <span className="text-sm font-body text-ink">{u.display_name || u.email || u.id}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-mono text-muted">
+                        {u.lastDate
+                          ? `Last logged ${new Date(u.lastDate + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`
+                          : "Never logged"}
+                      </span>
+                      <span className="text-xs font-mono font-semibold text-accent">
+                        {u.daysSince === 999 ? "—" : `${u.daysSince} working day${u.daysSince !== 1 ? "s" : ""} ago`}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           {allUsers.length === 0 ? (
             <div className="bg-card border border-border rounded-2xl p-10 text-center">
