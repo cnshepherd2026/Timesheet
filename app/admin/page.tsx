@@ -345,8 +345,60 @@ export default function AdminPage() {
                 className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all text-sm">›</button>
             </div>
           </div>
-          <p className="text-xs font-mono text-muted">{weekLabel}</p>
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-ink/5 border border-border rounded-lg">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-muted shrink-0"><rect x="1" y="2" width="10" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M1 5h10M4 1v2M8 1v2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+            <span className="text-xs font-mono font-medium text-ink">{weekLabel}</span>
+          </div>
 
+          {allUsers.length === 0 ? (
+            <div className="bg-card border border-border rounded-2xl p-10 text-center">
+              <p className="text-sm text-muted">No users have logged time yet.</p>
+            </div>
+          ) : (
+            <div className="bg-card border border-border rounded-2xl overflow-hidden">
+              {/* Header row */}
+              <div className="grid grid-cols-[1fr_repeat(5,_52px)] gap-2 px-6 py-3 border-b border-border bg-paper/50">
+                <div className="text-xs font-mono text-muted uppercase tracking-widest">Person</div>
+                {attendWeekDays.map(d => (
+                  <div key={d.toISOString()} className="text-center text-xs font-mono text-muted uppercase tracking-wider">
+                    {d.toLocaleDateString("en-GB", { weekday: "short" })}
+                    <div className="text-[10px] text-muted/60">{d.getDate()}</div>
+                  </div>
+                ))}
+              </div>
+              {/* User rows */}
+              {allUsers.map((user, i) => (
+                <div key={user.id} className={`grid grid-cols-[1fr_repeat(5,_52px)] gap-2 px-6 py-3 items-center ${i < allUsers.length - 1 ? "border-b border-border/50" : ""}`}>
+                  <div className="text-sm font-body text-ink truncate">{user.display_name || user.email || user.id}</div>
+                  {attendWeekDays.map(d => {
+                    const status = getUserDayStatus(user.id, d);
+                    const key = localDateKey(d);
+                    const logged = (hoursByUserDate[user.id] || {})[key] || 0;
+                    const target = targetHours(d);
+                    let cell = <div className="w-10 h-10 mx-auto rounded-lg bg-border/15" />;
+                    if (status === "green") cell = (
+                      <div title={`${logged}h logged`} className="w-10 h-10 mx-auto rounded-lg bg-emerald-100 border border-emerald-200 flex items-center justify-center">
+                        <span className="text-[10px] font-mono text-emerald-700 font-medium">{logged}h</span>
+                      </div>
+                    );
+                    if (status === "red") cell = (
+                      <div title={`${logged}h / ${target}h`} className="w-10 h-10 mx-auto rounded-lg bg-red-50 border border-red-200 flex items-center justify-center">
+                        <span className="text-[10px] font-mono text-red-500 font-medium">{logged > 0 ? `${logged}h` : "—"}</span>
+                      </div>
+                    );
+                    if (status === "future") cell = <div className="w-10 h-10 mx-auto rounded-lg bg-border/10 border border-dashed border-border/30" />;
+                    return <div key={d.toISOString()}>{cell}</div>;
+                  })}
+                </div>
+              ))}
+              {/* Legend */}
+              <div className="flex items-center gap-4 px-6 py-3 border-t border-border/50 bg-paper/30">
+                <span className="flex items-center gap-1.5 text-xs font-mono text-muted"><span className="w-3 h-3 rounded-sm bg-emerald-100 border border-emerald-200 inline-block"/>On target</span>
+                <span className="flex items-center gap-1.5 text-xs font-mono text-muted"><span className="w-3 h-3 rounded-sm bg-red-50 border border-red-200 inline-block"/>Missing / short</span>
+                <span className="flex items-center gap-1.5 text-xs font-mono text-muted"><span className="w-3 h-3 rounded-sm bg-border/15 inline-block"/>Weekend</span>
+              </div>
+            </div>
+          )}
           {/* Inactive users alert */}
           <div className="bg-card border border-border rounded-2xl p-5">
             <div className="flex items-center justify-between mb-4">
@@ -399,56 +451,6 @@ export default function AdminPage() {
               </div>
             )}
           </div>
-
-          {allUsers.length === 0 ? (
-            <div className="bg-card border border-border rounded-2xl p-10 text-center">
-              <p className="text-sm text-muted">No users have logged time yet.</p>
-            </div>
-          ) : (
-            <div className="bg-card border border-border rounded-2xl overflow-hidden">
-              {/* Header row */}
-              <div className="grid grid-cols-[1fr_repeat(5,_52px)] gap-2 px-6 py-3 border-b border-border bg-paper/50">
-                <div className="text-xs font-mono text-muted uppercase tracking-widest">Person</div>
-                {attendWeekDays.map(d => (
-                  <div key={d.toISOString()} className="text-center text-xs font-mono text-muted uppercase tracking-wider">
-                    {d.toLocaleDateString("en-GB", { weekday: "short" })}
-                    <div className="text-[10px] text-muted/60">{d.getDate()}</div>
-                  </div>
-                ))}
-              </div>
-              {/* User rows */}
-              {allUsers.map((user, i) => (
-                <div key={user.id} className={`grid grid-cols-[1fr_repeat(5,_52px)] gap-2 px-6 py-3 items-center ${i < allUsers.length - 1 ? "border-b border-border/50" : ""}`}>
-                  <div className="text-sm font-body text-ink truncate">{user.display_name || user.email || user.id}</div>
-                  {attendWeekDays.map(d => {
-                    const status = getUserDayStatus(user.id, d);
-                    const key = localDateKey(d);
-                    const logged = (hoursByUserDate[user.id] || {})[key] || 0;
-                    const target = targetHours(d);
-                    let cell = <div className="w-10 h-10 mx-auto rounded-lg bg-border/15" />;
-                    if (status === "green") cell = (
-                      <div title={`${logged}h logged`} className="w-10 h-10 mx-auto rounded-lg bg-emerald-100 border border-emerald-200 flex items-center justify-center">
-                        <span className="text-[10px] font-mono text-emerald-700 font-medium">{logged}h</span>
-                      </div>
-                    );
-                    if (status === "red") cell = (
-                      <div title={`${logged}h / ${target}h`} className="w-10 h-10 mx-auto rounded-lg bg-red-50 border border-red-200 flex items-center justify-center">
-                        <span className="text-[10px] font-mono text-red-500 font-medium">{logged > 0 ? `${logged}h` : "—"}</span>
-                      </div>
-                    );
-                    if (status === "future") cell = <div className="w-10 h-10 mx-auto rounded-lg bg-border/10 border border-dashed border-border/30" />;
-                    return <div key={d.toISOString()}>{cell}</div>;
-                  })}
-                </div>
-              ))}
-              {/* Legend */}
-              <div className="flex items-center gap-4 px-6 py-3 border-t border-border/50 bg-paper/30">
-                <span className="flex items-center gap-1.5 text-xs font-mono text-muted"><span className="w-3 h-3 rounded-sm bg-emerald-100 border border-emerald-200 inline-block"/>On target</span>
-                <span className="flex items-center gap-1.5 text-xs font-mono text-muted"><span className="w-3 h-3 rounded-sm bg-red-50 border border-red-200 inline-block"/>Missing / short</span>
-                <span className="flex items-center gap-1.5 text-xs font-mono text-muted"><span className="w-3 h-3 rounded-sm bg-border/15 inline-block"/>Weekend</span>
-              </div>
-            </div>
-          )}
         </section>
 
         {/* ── TIME REPORT ── */}
