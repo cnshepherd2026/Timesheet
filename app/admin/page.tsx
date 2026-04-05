@@ -320,7 +320,8 @@ export default function AdminPage() {
       <header className="border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src="/jym-logo.jpg" alt="JYM Partnership" className="h-8 w-auto object-contain"/>
+            <img src="/JYM-Logo.jpg" alt="JYM Partnership" className="h-8 w-auto object-contain"/>
+            <span className="font-display font-semibold text-sm text-ink hidden sm:block">Timesheet</span>
             <span className="text-xs font-mono text-muted bg-border/60 px-2 py-0.5 rounded-md">Admin</span>
           </div>
           <button onClick={() => router.push("/dashboard")} className="text-xs font-mono text-muted hover:text-ink transition-colors">← Back to timesheet</button>
