@@ -50,7 +50,19 @@ export default function AdminPage() {
   const [filterMonth, setFilterMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [editingName, setEditingName] = useState<Record<string, string>>({});
   const [attendWeekOffset, setAttendWeekOffset] = useState(0);
-  const [inactiveThreshold, setInactiveThreshold] = useState(3);
+  const [inactiveThreshold, setInactiveThreshold] = useState<10 | 22>(() => {
+    try {
+      const saved = typeof window !== "undefined" ? localStorage.getItem("jym-inactive-threshold") : null;
+      if (saved === "22") return 22;
+    } catch {}
+    return 10;
+  });
+
+  function toggleInactiveThreshold() {
+    const next = inactiveThreshold === 10 ? 22 : 10;
+    setInactiveThreshold(next);
+    try { localStorage.setItem("jym-inactive-threshold", String(next)); } catch {}
+  }
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviting, setInviting] = useState(false);
   const [confirmDeleteUser, setConfirmDeleteUser] = useState<Profile | null>(null);
@@ -410,23 +422,19 @@ export default function AdminPage() {
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-2 text-xs font-mono text-muted">
-                <span>Flag after</span>
-                <select value={inactiveThreshold} onChange={e => setInactiveThreshold(Number(e.target.value))}
-                  className="px-2 py-1 rounded-lg border border-border bg-paper text-ink focus:outline-none focus:border-ink transition-all">
-                  <option value={1}>1 day</option>
-                  <option value={2}>2 days</option>
-                  <option value={3}>3 days</option>
-                  <option value={5}>5 days</option>
-                  <option value={10}>10 days</option>
-                </select>
-                <span>without logging</span>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs font-mono transition-colors ${inactiveThreshold === 10 ? "text-ink font-semibold" : "text-muted"}`}>2 weeks</span>
+                <button onClick={toggleInactiveThreshold}
+                  className={`w-10 h-6 rounded-full transition-all relative ${inactiveThreshold === 22 ? "bg-accent" : "bg-border"}`}>
+                  <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${inactiveThreshold === 22 ? "left-5" : "left-1"}`}/>
+                </button>
+                <span className={`text-xs font-mono transition-colors ${inactiveThreshold === 22 ? "text-ink font-semibold" : "text-muted"}`}>1 month</span>
               </div>
             </div>
             {inactiveUsers.length === 0 ? (
               <div className="flex items-center gap-2 text-sm text-emerald-600 font-mono">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"/>
-                All team members have logged time within the last {inactiveThreshold} working day{inactiveThreshold !== 1 ? "s" : ""}
+                All team members have logged time within the last {inactiveThreshold === 10 ? "2 weeks" : "month"}
               </div>
             ) : (
               <div className="space-y-2">
