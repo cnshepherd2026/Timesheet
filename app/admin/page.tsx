@@ -320,15 +320,7 @@ export default function AdminPage() {
       <header className="border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-7 h-7 bg-ink rounded flex items-center justify-center shrink-0">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                <rect x="2" y="2" width="5" height="5" fill="#F5F2EB"/>
-                <rect x="9" y="2" width="5" height="5" fill="#E8572A"/>
-                <rect x="2" y="9" width="5" height="5" fill="#E8572A"/>
-                <rect x="9" y="9" width="5" height="5" fill="#F5F2EB"/>
-              </svg>
-            </div>
-            <span className="font-display font-bold text-base">JYM Timesheet</span>
+            <img src="/jym-logo.jpg" alt="JYM Partnership" className="h-8 w-auto object-contain"/>
             <span className="text-xs font-mono text-muted bg-border/60 px-2 py-0.5 rounded-md">Admin</span>
           </div>
           <button onClick={() => router.push("/dashboard")} className="text-xs font-mono text-muted hover:text-ink transition-colors">← Back to timesheet</button>
