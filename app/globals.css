@@ -11,13 +11,13 @@
   --color-card: #FDFAF5;
 }
 
-/* Dark mode */
+/* Dark mode — cool slate, not brown */
 .dark {
-  --color-ink: #F0EDE8;
-  --color-paper: #1A1917;
-  --color-muted: #6B6660;
-  --color-border: #2E2C29;
-  --color-card: #211F1C;
+  --color-ink: #E8EAF0;
+  --color-paper: #1E2028;
+  --color-muted: #7A8099;
+  --color-border: #2E3248;
+  --color-card: #252836;
 }
 
 @layer base {
@@ -26,7 +26,7 @@
     min-height: 100vh;
     background-color: var(--color-paper);
     color: var(--color-ink);
-    transition: background-color 0.2s ease, color 0.2s ease;
+    transition: background-color 0.25s ease, color 0.25s ease;
   }
 }
 
