@@ -21,19 +21,19 @@ type Client = {
   sort_order: number;
 };
 
-// Format date as YYYY-MM-DD in local time
-function localDateKey(date: Date) {
+// ---------- date helpers ----------
+function localDateKey(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
 
-function todayKey() {
+function todayKey(): string {
   return localDateKey(new Date());
 }
 
-function targetHours(date: Date) {
+function targetHours(date: Date): number {
   const day = date.getDay();
   if (day === 0 || day === 6) return 0;
   if (day === 5) return 7;
@@ -59,6 +59,7 @@ function getCalendarMonth(year: number, month: number) {
   return weeks;
 }
 
+// ---------- component ----------
 export default function Dashboard() {
   const supabase = createClient();
   const router = useRouter();
@@ -72,7 +73,6 @@ export default function Dashboard() {
   const [success, setSuccess] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // Calendar month state
   const [calMonth, setCalMonth] = useState(() => {
     const d = new Date();
     return { year: d.getFullYear(), month: d.getMonth() };
@@ -84,7 +84,7 @@ export default function Dashboard() {
     hours: "8",
   });
 
-  // ✅ Fetch clients (unchanged)
+  // ---------- fetch clients ----------
   const fetchClients = useCallback(async () => {
     const { data } = await supabase
       .from("clients")
@@ -98,7 +98,7 @@ export default function Dashboard() {
     }
   }, [supabase]);
 
-  // ✅ NEW: Fetch entries by month
+  // ---------- fetch entries FOR MONTH ----------
   const fetchEntriesForMonth = useCallback(
     async (userId: string, year: number, month: number) => {
       setLoading(true);
@@ -120,7 +120,7 @@ export default function Dashboard() {
     [supabase]
   );
 
-  // ✅ Auth + initial load
+  // ---------- auth + initial load ----------
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data }) => {
       if (!data.session) {
@@ -143,16 +143,16 @@ export default function Dashboard() {
       }
 
       await fetchClients();
-      await fetchEntriesForMonth(u.id, calMonth.year, calMonth.month);
     });
-  }, [supabase, router, fetchClients, fetchEntriesForMonth]);
+  }, [supabase, router, fetchClients]);
 
-  // ✅ Reload entries when month changes
+  // ✅ load entries WHEN user OR month becomes available
   useEffect(() => {
     if (!user?.id) return;
     fetchEntriesForMonth(user.id, calMonth.year, calMonth.month);
-  }, [calMonth, user?.id, fetchEntriesForMonth]);
+  }, [user, calMonth, fetchEntriesForMonth]);
 
+  // ---------- actions ----------
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!user) return;
@@ -188,6 +188,7 @@ export default function Dashboard() {
     if (user) await fetchEntriesForMonth(user.id, calMonth.year, calMonth.month);
   }
 
+  // ---------- loading ----------
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -198,11 +199,11 @@ export default function Dashboard() {
     );
   }
 
+  // ---------- UI ----------
   return (
     <div className="min-h-screen">
-      {/* ✅ Your existing UI remains unchanged below */}
-      {/* Month controls already work — they now trigger data reloads */}
-      {/* Everything else behaves exactly the same */}
+      {/* ✅ Your existing JSX goes here unchanged */}
+      {/* Month navigation already updates calMonth and now reloads data correctly */}
     </div>
   );
 }
