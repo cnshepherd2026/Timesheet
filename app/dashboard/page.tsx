@@ -524,8 +524,8 @@ export default function Dashboard() {
                         let cellBg = "";
                         if (isWeekend) cellBg = "bg-paper/10";
                         else if (isFuture) cellBg = "";
-                        else if (onTarget) cellBg = "bg-emerald-50";
-                        else if (isPastOrToday && target > 0) cellBg = "bg-red-50";
+                        else if (onTarget) cellBg = "bg-emerald-100 dark:bg-emerald-900/50";
+                        else if (isPastOrToday && target > 0) cellBg = "bg-red-100 dark:bg-red-900/50";
                         if (isWeekend) return (
                           <div key={di} className={`border-r border-border/20 last:border-r-0 ${cellBg} flex flex-col items-center justify-start pt-1.5`}>
                             <span className="text-[9px] font-mono text-muted/30">{date.getDate()}</span>
@@ -539,14 +539,14 @@ export default function Dashboard() {
                             <div className="flex-1 space-y-0.5 min-w-0">
                               {dayEntries.map(entry => (
                                 <div key={entry.id} onClick={() => startEdit(entry)}
-                                  className="text-[10px] font-mono rounded px-1 py-0.5 truncate cursor-pointer leading-tight bg-white/60 hover:bg-white/90 border border-black/5 transition-colors">
-                                  <span className="text-ink font-medium">{entry.client}</span>
-                                  <span className="text-muted ml-1">{entry.hours}h</span>
+                                  className="text-[10px] font-mono rounded px-1.5 py-1 truncate cursor-pointer leading-tight bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 transition-colors shadow-sm hover:shadow">
+                                  <span className="text-gray-900 dark:text-gray-100 font-semibold">{entry.client}</span>
+                                  <span className="text-gray-600 dark:text-gray-400 ml-1">{entry.hours}h</span>
                                 </div>
                               ))}
                             </div>
                             {target > 0 && !isFuture && (
-                              <div className={`text-[10px] font-mono font-bold text-right mt-0.5 shrink-0 ${onTarget ? "text-emerald-700" : "text-red-600"}`}>
+                              <div className={`text-[10px] font-mono font-bold text-right mt-0.5 shrink-0 ${onTarget ? "text-emerald-700 dark:text-emerald-300" : "text-red-600 dark:text-red-300"}`}>
                                 {dayTotal > 0 ? `${dayTotal}h` : <span className="font-normal opacity-50">—</span>}
                               </div>
                             )}
