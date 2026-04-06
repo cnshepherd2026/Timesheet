@@ -55,7 +55,7 @@ export default function Dashboard() {
   const [filterClient, setFilterClient] = useState("All");
   const [success, setSuccess] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
-  const [entriesView, setEntriesView] = useState<"list" | "week" | "month">("week");
+  const [entriesView, setEntriesView] = useState<"list" | "month">("month");
   const [darkMode, setDarkMode] = useState(() => {
     try { return typeof window !== "undefined" && localStorage.getItem("jym-dark-mode") === "true"; }
     catch { return false; }
@@ -70,14 +70,14 @@ export default function Dashboard() {
       else document.documentElement.classList.remove("dark");
     } catch {}
   }
-  const SECTIONS = ["log", "stats", "calendar", "breakdown", "entries"] as const;
+  const SECTIONS = ["log", "stats", "breakdown", "entries"] as const;
   type SectionId = typeof SECTIONS[number];
   const [sectionOrder, setSectionOrder] = useState<SectionId[]>(() => {
     try {
       const saved = typeof window !== "undefined" ? localStorage.getItem("jym-section-order") : null;
       if (saved) return JSON.parse(saved);
     } catch {}
-    return ["log", "entries", "stats", "calendar", "breakdown"];
+    return ["log", "entries", "stats", "breakdown"];
   });
   const dragSectionItem = useRef<number | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
@@ -429,92 +429,6 @@ export default function Dashboard() {
               </div>
             </div>
           );
-          if (sectionId === "calendar") return (
-            <div key="calendar" {...dragProps} className="group relative">
-              {handle}
-              <div className="bg-card border border-border rounded-2xl p-7">
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h2 className="font-display text-sm font-bold uppercase tracking-widest text-muted">Month View</h2>
-              <p className="font-display font-bold text-lg mt-0.5">{calMonthLabel}</p>
-            </div>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setCalMonth(m => {
-                  const d = new Date(m.year, m.month - 1, 1);
-                  return { year: d.getFullYear(), month: d.getMonth() };
-                })}
-                className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all">‹</button>
-              <button
-                onClick={() => { const n = new Date(); setCalMonth({ year: n.getFullYear(), month: n.getMonth() }); }}
-                className="text-xs font-mono px-3 py-1.5 rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all">Today</button>
-              <button
-                onClick={() => setCalMonth(m => {
-                  const d = new Date(m.year, m.month + 1, 1);
-                  return { year: d.getFullYear(), month: d.getMonth() };
-                })}
-                className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all">›</button>
-            </div>
-          </div>
-
-          {/* Day headers */}
-          <div className="grid grid-cols-7 mb-2">
-            {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d => (
-              <div key={d} className={`text-center text-xs font-mono uppercase tracking-wider py-1 ${d === "Sat" || d === "Sun" ? "text-muted/30" : "text-muted"}`}>{d}</div>
-            ))}
-          </div>
-
-          {/* Calendar grid */}
-          <div className="space-y-1">
-            {calWeeks.map((week, wi) => (
-              <div key={wi} className="grid grid-cols-7 gap-1">
-                {week.map((date, di) => {
-                  if (!date) return <div key={di}/>;
-                  const status = getDayStatus(date);
-                  const isToday = localDateKey(date) === todayKey();
-                  const key = localDateKey(date);
-                  const logged = hoursByDate[key] || 0;
-                  const target = targetHours(date);
-
-                  let bg = "bg-border/15 text-muted/30"; // weekend
-                  if (status === "green") bg = "bg-emerald-100 text-emerald-700 border border-emerald-200";
-                  if (status === "red") bg = "bg-red-50 text-red-500 border border-red-200";
-                  if (status === "future") bg = "bg-border/10 text-muted/40 border border-dashed border-border/30";
-
-                  return (
-                    <div key={di}
-                      title={target > 0 ? `${logged}h logged / ${target}h target` : "Weekend"}
-                      className={`relative rounded-lg p-1.5 text-center ${bg} ${isToday ? "ring-2 ring-accent ring-offset-1" : ""}`}>
-                      <span className="text-xs font-mono leading-none block">{date.getDate()}</span>
-                      {target > 0 && status !== "future" && (
-                        <div className="text-[9px] font-mono leading-none mt-0.5 opacity-80">
-                          {logged > 0 ? `${logged}h` : "—"}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-
-          {/* Legend */}
-          <div className="flex items-center justify-between mt-5 pt-4 border-t border-border/50">
-            <div className="flex items-center gap-4 text-xs font-mono text-muted">
-              <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-sm bg-emerald-100 border border-emerald-200 inline-block"/>
-                {greenDays} on target
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-sm bg-red-50 border border-red-200 inline-block"/>
-                {redDays} missing
-              </span>
-            </div>
-            <span className="text-xs font-mono text-muted">Mon–Thu 8h · Fri 7h</span>
-          </div>
-              </div>
-            </div>
-          );
           if (sectionId === "breakdown") return clientTotals.length === 0 ? null : (
             <div key="breakdown" {...dragProps} className="group relative">
               {handle}
@@ -552,10 +466,6 @@ export default function Dashboard() {
             <div className="flex items-center gap-3">
               {/* View toggle */}
               <div className="flex rounded-lg border border-border overflow-hidden">
-                <button onClick={() => setEntriesView("week")}
-                  className={`text-xs font-mono px-3 py-1.5 transition-colors ${entriesView === "week" ? "bg-ink text-paper" : "bg-paper text-muted hover:text-ink"}`}>
-                  Week
-                </button>
                 <button onClick={() => setEntriesView("month")}
                   className={`text-xs font-mono px-3 py-1.5 transition-colors ${entriesView === "month" ? "bg-ink text-paper" : "bg-paper text-muted hover:text-ink"}`}>
                   Month
@@ -583,54 +493,61 @@ export default function Dashboard() {
           </div>
 
           {entriesView === "month" ? (() => {
-            // Month grid view — shows all days with entries
             const weeks = getCalendarMonth(calMonth.year, calMonth.month);
             const monthTotal = monthEntries.reduce((s, e) => s + e.hours, 0);
+            const gridCols = "grid-cols-[1fr_1fr_1fr_1fr_1fr_28px_28px]";
             return (
               <div className="bg-card border border-border rounded-2xl overflow-hidden">
-                {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-paper/40">
+                <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-paper/40">
                   <span className="font-display font-bold text-sm">{calMonthLabel}</span>
                   <span className="text-xs font-mono font-medium text-ink">{monthTotal.toFixed(1)}h total</span>
                 </div>
-                {/* Day headers */}
-                <div className="grid grid-cols-7 border-b border-border">
-                  {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d => (
-                    <div key={d} className={`text-center text-xs font-mono uppercase tracking-wider py-2 ${d === "Sat" || d === "Sun" ? "text-muted/30" : "text-muted"}`}>{d}</div>
+                <div className={`grid ${gridCols} border-b border-border`}>
+                  {["Mon","Tue","Wed","Thu","Fri","Sa","Su"].map((d, i) => (
+                    <div key={d} className={`text-center text-xs font-mono uppercase tracking-wider py-2 ${i >= 5 ? "text-muted/30 text-[9px]" : "text-muted"}`}>{d}</div>
                   ))}
                 </div>
-                {/* Weeks */}
                 <div>
                   {weeks.map((week, wi) => (
-                    <div key={wi} className={`grid grid-cols-7 ${wi < weeks.length - 1 ? "border-b border-border/40" : ""}`}>
+                    <div key={wi} className={`grid ${gridCols} ${wi < weeks.length - 1 ? "border-b border-border/40" : ""}`}>
                       {week.map((date, di) => {
-                        if (!date) return <div key={di} className="min-h-[80px] border-r border-border/30 last:border-r-0 bg-paper/20"/>;
+                        const isWeekend = di >= 5;
+                        if (!date) return <div key={di} className={`border-r border-border/20 last:border-r-0 bg-paper/10 ${isWeekend ? "" : "min-h-[90px]"}`}/>;
                         const key = localDateKey(date);
                         const dayEntries = monthEntries.filter(e => e.date === key);
                         const dayTotal = dayEntries.reduce((s, e) => s + e.hours, 0);
                         const isToday = key === todayKey();
-                        const isWeekend = date.getDay() === 0 || date.getDay() === 6;
                         const target = targetHours(date);
+                        const isFuture = key > todayKey();
+                        const isPastOrToday = !isFuture;
                         const onTarget = target > 0 && dayTotal >= target;
-                        const isPast = key < todayKey();
+                        let cellBg = "";
+                        if (isWeekend) cellBg = "bg-paper/10";
+                        else if (isFuture) cellBg = "";
+                        else if (onTarget) cellBg = "bg-emerald-50";
+                        else if (isPastOrToday && target > 0) cellBg = "bg-red-50";
+                        if (isWeekend) return (
+                          <div key={di} className={`border-r border-border/20 last:border-r-0 ${cellBg} flex flex-col items-center justify-start pt-1.5`}>
+                            <span className="text-[9px] font-mono text-muted/30">{date.getDate()}</span>
+                          </div>
+                        );
                         return (
-                          <div key={di} className={`min-h-[80px] border-r border-border/30 last:border-r-0 p-1.5 flex flex-col ${isWeekend ? "bg-paper/20" : ""} ${isToday ? "bg-accent/5" : ""}`}>
-                            <div className={`text-xs font-mono mb-1 w-6 h-6 flex items-center justify-center rounded-full ${isToday ? "bg-accent text-white font-semibold" : isWeekend ? "text-muted/30" : "text-muted"}`}>
+                          <div key={di} className={`min-h-[90px] border-r border-border/20 last:border-r-0 p-1.5 flex flex-col ${cellBg} ${isToday ? "ring-inset ring-2 ring-accent/50" : ""}`}>
+                            <div className={`text-xs font-mono mb-1 w-5 h-5 flex items-center justify-center rounded-full shrink-0 ${isToday ? "bg-accent text-white text-[10px] font-bold" : "text-muted"}`}>
                               {date.getDate()}
                             </div>
-                            <div className="flex-1 space-y-0.5">
+                            <div className="flex-1 space-y-0.5 min-w-0">
                               {dayEntries.map(entry => (
-                                <div key={entry.id}
-                                  onClick={() => startEdit(entry)}
-                                  className="text-[10px] font-mono bg-ink/8 hover:bg-ink/15 rounded px-1.5 py-0.5 truncate cursor-pointer transition-colors leading-tight">
-                                  <span className="text-ink">{entry.client}</span>
+                                <div key={entry.id} onClick={() => startEdit(entry)}
+                                  className="text-[10px] font-mono rounded px-1 py-0.5 truncate cursor-pointer leading-tight bg-white/60 hover:bg-white/90 border border-black/5 transition-colors">
+                                  <span className="text-ink font-medium">{entry.client}</span>
                                   <span className="text-muted ml-1">{entry.hours}h</span>
                                 </div>
                               ))}
                             </div>
-                            {dayTotal > 0 && !isWeekend && (
-                              <div className={`text-[9px] font-mono text-right mt-0.5 ${onTarget ? "text-emerald-500" : isPast ? "text-red-400" : "text-muted"}`}>
-                                {dayTotal}h
+                            {target > 0 && !isFuture && (
+                              <div className={`text-[10px] font-mono font-bold text-right mt-0.5 shrink-0 ${onTarget ? "text-emerald-700" : "text-red-600"}`}>
+                                {dayTotal > 0 ? `${dayTotal}h` : <span className="font-normal opacity-50">—</span>}
                               </div>
                             )}
                           </div>
@@ -639,102 +556,10 @@ export default function Dashboard() {
                     </div>
                   ))}
                 </div>
-              </div>
-            );
-          })() : entriesView === "week" ? (() => {
-            // Calculate week days for current weekOffset
-            const now = new Date();
-            const monday = new Date(now);
-            monday.setDate(now.getDate() - ((now.getDay() + 6) % 7) + weekOffset * 7);
-            monday.setHours(0, 0, 0, 0);
-            const weekDays = Array.from({ length: 5 }, (_, i) => {
-              const d = new Date(monday);
-              d.setDate(monday.getDate() + i);
-              return d;
-            });
-            const sunday = new Date(monday);
-            sunday.setDate(monday.getDate() + 6);
-            const weekLabel = `${monday.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} – ${sunday.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
-            const weekEntries = entries.filter(e => e.date >= localDateKey(monday) && e.date <= localDateKey(sunday));
-            const weekTotal = weekEntries.reduce((s, e) => s + e.hours, 0);
-
-            return (
-              <div className="bg-card border border-border rounded-2xl overflow-hidden">
-                {/* Week nav */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-paper/40">
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => setWeekOffset(o => o - 1)}
-                      className="w-7 h-7 flex items-center justify-center rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all text-sm">‹</button>
-                    <button onClick={() => setWeekOffset(0)}
-                      className="text-xs font-mono px-2.5 py-1 rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all">This week</button>
-                    <button onClick={() => setWeekOffset(o => o + 1)}
-                      className="w-7 h-7 flex items-center justify-center rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all text-sm">›</button>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-xs font-mono text-muted">{weekLabel}</span>
-                    <span className="text-xs font-mono font-medium text-ink">{weekTotal.toFixed(1)}h total</span>
-                  </div>
-                </div>
-
-                {/* Day columns */}
-                <div className="grid grid-cols-5 divide-x divide-border/50">
-                  {weekDays.map(day => {
-                    const key = localDateKey(day);
-                    const dayEntries = entries.filter(e => e.date === key);
-                    const dayTotal = dayEntries.reduce((s, e) => s + e.hours, 0);
-                    const target = targetHours(day);
-                    const isToday = key === todayKey();
-                    const isPast = key < todayKey();
-                    const onTarget = dayTotal >= target;
-                    const dayName = day.toLocaleDateString("en-GB", { weekday: "short" });
-                    const dayNum = day.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-
-                    return (
-                      <div key={key} className={`flex flex-col min-h-[160px] ${isToday ? "bg-accent/5" : ""}`}>
-                        {/* Day header */}
-                        <div className={`px-3 py-3 border-b border-border/50 ${isToday ? "border-accent/20" : ""}`}>
-                          <div className="flex items-center justify-between mb-0.5">
-                            <span className={`text-xs font-mono font-medium uppercase tracking-wider ${isToday ? "text-accent" : "text-muted"}`}>{dayName}</span>
-                            {target > 0 && (isPast || isToday) && dayTotal > 0 && (
-                              <span className={`text-[10px] font-mono ${onTarget ? "text-emerald-600" : "text-red-400"}`}>
-                                {onTarget ? "✓" : `${dayTotal}/${target}h`}
-                              </span>
-                            )}
-                          </div>
-                          <div className={`text-xs font-mono ${isToday ? "text-accent font-semibold" : "text-muted/60"}`}>{dayNum}</div>
-                        </div>
-
-                        {/* Entries */}
-                        <div className="flex-1 p-2 space-y-1.5">
-                          {dayEntries.map(entry => (
-                            <div key={entry.id}
-                              className="group relative bg-ink/6 hover:bg-ink/10 rounded-lg px-2.5 py-2 transition-all cursor-pointer"
-                              onClick={() => startEdit(entry)}>
-                              <div className="text-xs font-mono text-ink font-medium truncate">{entry.client}</div>
-                              <div className="text-[11px] font-mono text-muted mt-0.5">{entry.hours}h</div>
-                              <button
-                                onClick={e => { e.stopPropagation(); handleDelete(entry.id); }}
-                                className="absolute top-1.5 right-1.5 w-4 h-4 rounded text-muted hover:text-accent opacity-0 group-hover:opacity-100 transition-all text-[10px] flex items-center justify-center">
-                                ✕
-                              </button>
-                            </div>
-                          ))}
-                          {dayEntries.length === 0 && target > 0 && (
-                            <div className={`text-[10px] font-mono text-center py-4 ${isPast ? "text-red-300" : "text-muted/30"}`}>
-                              {isPast ? "No hours logged" : "—"}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Day total */}
-                        {dayTotal > 0 && (
-                          <div className={`px-3 py-2 border-t border-border/30 text-right text-xs font-mono font-semibold ${onTarget ? "text-emerald-600" : "text-muted"}`}>
-                            {dayTotal}h
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                <div className="flex items-center gap-4 px-5 py-3 border-t border-border/50 bg-paper/30">
+                  <span className="flex items-center gap-1.5 text-xs font-mono text-muted"><span className="w-3 h-3 rounded-sm bg-emerald-50 border border-emerald-200 inline-block"/>On target</span>
+                  <span className="flex items-center gap-1.5 text-xs font-mono text-muted"><span className="w-3 h-3 rounded-sm bg-red-50 border border-red-200 inline-block"/>Missing</span>
+                  <span className="ml-auto text-xs font-mono text-muted">Mon–Thu 8h · Fri 7h</span>
                 </div>
               </div>
             );
