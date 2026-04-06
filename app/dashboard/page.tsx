@@ -497,7 +497,7 @@ export default function Dashboard() {
             const monthTotal = monthEntries.reduce((s, e) => s + e.hours, 0);
             const gridCols = "grid-cols-[1fr_1fr_1fr_1fr_1fr_28px_28px]";
             return (
-              <div className="bg-card border border-border rounded-2xl overflow-hidden">
+              <div className="bg-card border border-border rounded-2xl overflow-hidden"><div className="overflow-x-auto"><div className="min-w-[560px]">
                 <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-paper/40">
                   <span className="font-display font-bold text-sm">{calMonthLabel}</span>
                   <span className="text-xs font-mono font-medium text-ink">{monthTotal.toFixed(1)}h total</span>
@@ -540,7 +540,7 @@ export default function Dashboard() {
                               {dayEntries.map(entry => (
                                 <div key={entry.id} onClick={() => startEdit(entry)}
                                   className="text-[10px] font-mono rounded px-1.5 py-1 truncate cursor-pointer leading-tight bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 transition-colors shadow-sm hover:shadow">
-                                  <span className="text-gray-900 dark:text-gray-100 font-semibold">{entry.client}</span>
+                                  <span className="text-gray-900 dark:text-gray-100">{entry.client}</span>
                                   <span className="text-gray-600 dark:text-gray-400 ml-1">{entry.hours}h</span>
                                 </div>
                               ))}
@@ -556,9 +556,10 @@ export default function Dashboard() {
                     </div>
                   ))}
                 </div>
+                </div></div>
                 <div className="flex items-center gap-4 px-5 py-3 border-t border-border/50 bg-paper/30">
-                  <span className="flex items-center gap-1.5 text-xs font-mono text-muted"><span className="w-3 h-3 rounded-sm bg-emerald-50 border border-emerald-200 inline-block"/>On target</span>
-                  <span className="flex items-center gap-1.5 text-xs font-mono text-muted"><span className="w-3 h-3 rounded-sm bg-red-50 border border-red-200 inline-block"/>Missing</span>
+                  <span className="flex items-center gap-1.5 text-xs font-mono text-muted"><span className="w-3 h-3 rounded-sm bg-emerald-100 border border-emerald-200 inline-block"/>On target</span>
+                  <span className="flex items-center gap-1.5 text-xs font-mono text-muted"><span className="w-3 h-3 rounded-sm bg-red-100 border border-red-200 inline-block"/>Missing</span>
                   <span className="ml-auto text-xs font-mono text-muted">Mon–Thu 8h · Fri 7h</span>
                 </div>
               </div>
