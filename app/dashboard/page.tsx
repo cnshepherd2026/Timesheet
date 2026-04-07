@@ -311,6 +311,7 @@ export default function Dashboard() {
                   setEntriesView={setEntriesView} setFilterClient={setFilterClient}
                   setCalMonth={setCalMonth} onEdit={startEdit}
                   onDelete={handleDelete} onExportCSV={exportCSV}
+                  onDateClick={(dateStr) => { setForm(f => ({ ...f, date: dateStr })); window.scrollTo({ top: 0, behavior: "smooth" }); }}
                 />
               </div>
             );
