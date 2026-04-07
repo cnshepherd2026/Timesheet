@@ -276,7 +276,7 @@ export default function Dashboard() {
               onDragOver: (e: React.DragEvent) => e.preventDefault(),
             };
             if (sectionId === "log") return (
-              <div key="log" {...dragProps} className="group relative">
+              <div key="log" id="log-form" {...dragProps} className="group relative">
                 {handle}
                 <LogHoursForm
                   form={form} setForm={setForm} clients={clients}
@@ -311,7 +311,7 @@ export default function Dashboard() {
                   setEntriesView={setEntriesView} setFilterClient={setFilterClient}
                   setCalMonth={setCalMonth} onEdit={startEdit}
                   onDelete={handleDelete} onExportCSV={exportCSV}
-                  onDateClick={(dateStr) => { setForm(f => ({ ...f, date: dateStr })); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                  onDateClick={(dateStr) => { setForm(f => ({ ...f, date: dateStr })); setTimeout(() => { document.getElementById("log-form")?.scrollIntoView({ behavior: "smooth", block: "start" }); }, 50); }}
                 />
               </div>
             );
