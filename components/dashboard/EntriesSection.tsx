@@ -109,9 +109,10 @@ export default function EntriesSection({
                       </div>
                     );
                     return (
-                      <div key={di} onClick={() => { if (!dayEntries.length && !isFuture) onDateClick(key); }}
-                        className={`min-h-[90px] border-r border-border/20 last:border-r-0 p-1.5 flex flex-col ${cellBg} ${isToday ? "ring-inset ring-2 ring-accent/50" : ""} ${!dayEntries.length && !isFuture ? "cursor-pointer hover:brightness-95" : ""}`}>
-                        <div className={`text-xs font-mono mb-1 w-5 h-5 flex items-center justify-center rounded-full shrink-0 ${isToday ? "bg-accent text-white text-[10px] font-bold" : "text-muted"}`}>
+                      <div key={di}
+                        className={`min-h-[90px] border-r border-border/20 last:border-r-0 p-1.5 flex flex-col ${cellBg} ${isToday ? "ring-inset ring-2 ring-accent/50" : ""}`}>
+                        <div onClick={() => { if (!isFuture) onDateClick(key); }}
+                          className={`text-xs font-mono mb-1 w-5 h-5 flex items-center justify-center rounded-full shrink-0 transition-colors ${isToday ? "bg-accent text-white text-[10px] font-bold" : "text-muted"} ${!isFuture ? "cursor-pointer hover:bg-accent hover:text-white" : ""}`}>
                           {date.getDate()}
                         </div>
                         <div className="flex-1 space-y-0.5 min-w-0">
