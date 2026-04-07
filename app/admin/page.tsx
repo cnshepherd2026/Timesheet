@@ -383,7 +383,7 @@ export default function AdminPage() {
               {/* User rows */}
               {allUsers.map((user, i) => (
                 <div key={user.id} className={`grid grid-cols-[1fr_repeat(5,_44px)_8px_repeat(5,_44px)] gap-1 px-4 py-3 items-center ${i < allUsers.length - 1 ? "border-b border-border/50" : ""}`}>
-                  <div className="text-sm font-body text-ink truncate">{user.display_name || user.email || user.id}</div>
+                  <button onClick={() => router.push(`/admin/user/${user.id}`)} className="text-sm font-body text-ink truncate hover:text-accent transition-colors text-left">{user.display_name || user.email || user.id}</button>
                   {attendWeekDays.map((d, i) => {
                     const status = getUserDayStatus(user.id, d);
                     const key = localDateKey(d);
