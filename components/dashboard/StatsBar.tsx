@@ -6,10 +6,10 @@ type Props = {
   totalHours: number;
   monthEntriesCount: number;
   calMonthLabel: string;
-  entriesCache: Record<string, Entry[]>;
+  allEntries: Entry[];
 };
 
-export default function StatsBar({ totalHours, monthEntriesCount, calMonthLabel, entriesCache }: Props) {
+export default function StatsBar({ totalHours, monthEntriesCount, calMonthLabel, allEntries }: Props) {
   const now = new Date();
   const monday = new Date(now);
   monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
@@ -19,7 +19,7 @@ export default function StatsBar({ totalHours, monthEntriesCount, calMonthLabel,
   const mondayKey = localDateKey(monday);
   const sundayKey = localDateKey(sunday);
 
-  const thisWeek = Object.values(entriesCache).flat()
+  const thisWeek = allEntries
     .filter(e => e.date >= mondayKey && e.date <= sundayKey)
     .reduce((s, e) => s + e.hours, 0);
 
