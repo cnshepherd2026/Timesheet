@@ -301,7 +301,7 @@ export default function Dashboard() {
               </div>
             );
             if (sectionId === "entries") return (
-              <div key="entries" {...dragProps} className="group relative">
+              <div key="entries" {...dragProps} className="group relative min-w-0">
                 {handle}
                 <EntriesSection
                   monthEntries={monthEntries} filtered={filtered} clients={clients}
