@@ -23,16 +23,22 @@ function targetHours(date: Date): number {
   return 8;
 }
 
-function getWeekDays(weekOffset: number): Date[] {
+function getTwoWeekDays(twoWeekOffset: number): Date[] {
+  // twoWeekOffset moves in 2-week blocks; find the Monday of the current 2-week period
   const now = new Date();
   const monday = new Date(now);
-  monday.setDate(now.getDate() - ((now.getDay() + 6) % 7) + weekOffset * 7);
+  monday.setDate(now.getDate() - ((now.getDay() + 6) % 7) + twoWeekOffset * 10);
   monday.setHours(0, 0, 0, 0);
-  return Array.from({ length: 5 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    return d;
-  });
+  // Return Mon-Fri of week 1 then Mon-Fri of week 2
+  const days: Date[] = [];
+  for (let week = 0; week < 2; week++) {
+    for (let day = 0; day < 5; day++) {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + week * 7 + day);
+      days.push(d);
+    }
+  }
+  return days;
 }
 
 export default function AdminPage() {
@@ -263,8 +269,8 @@ export default function AdminPage() {
     return logged >= target ? "green" : "red";
   }
 
-  const attendWeekDays = getWeekDays(attendWeekOffset);
-  const weekLabel = `${attendWeekDays[0].toLocaleDateString("en-GB", { day: "numeric", month: "short" })} – ${attendWeekDays[4].toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
+  const attendWeekDays = getTwoWeekDays(attendWeekOffset);
+  const weekLabel = `${attendWeekDays[0].toLocaleDateString("en-GB", { day: "numeric", month: "short" })} – ${attendWeekDays[9].toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
 
   const filteredEntries = filterMonth ? entries.filter(e => e.date.startsWith(filterMonth)) : entries;
 
@@ -338,14 +344,14 @@ export default function AdminPage() {
         <section className="animate-fade-up space-y-5">
           <div className="flex items-end justify-between">
             <div>
-              <h1 className="font-display text-4xl font-bold text-ink">Attendance</h1>
-              <p className="text-sm text-muted mt-1">Daily hours target per team member. Mon–Thu 8h · Fri 7h</p>
+              <h1 className="font-display text-4xl font-bold text-ink">User Summary</h1>
+              <p className="text-sm text-muted mt-1">Two-week view of daily hours per team member. Mon–Thu 8h · Fri 7h</p>
             </div>
             <div className="flex items-center gap-1">
               <button onClick={() => setAttendWeekOffset(o => o - 1)}
                 className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all text-sm">‹</button>
               <button onClick={() => setAttendWeekOffset(0)}
-                className="text-xs font-mono px-3 py-1.5 rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all">This week</button>
+                className="text-xs font-mono px-3 py-1.5 rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all">Current</button>
               <button onClick={() => setAttendWeekOffset(o => o + 1)}
                 className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all text-sm">›</button>
             </div>
@@ -362,7 +368,7 @@ export default function AdminPage() {
           ) : (
             <div className="bg-card border border-border rounded-2xl overflow-hidden">
               {/* Header row */}
-              <div className="grid grid-cols-[1fr_repeat(5,_52px)] gap-2 px-6 py-3 border-b border-border bg-paper/50">
+              <div className="overflow-x-auto"><div className="min-w-[700px]"><div className="grid grid-cols-[1fr_repeat(10,_44px)] gap-1 px-4 py-3 border-b border-border bg-paper/50">
                 <div className="text-xs font-mono text-muted uppercase tracking-widest">Person</div>
                 {attendWeekDays.map(d => (
                   <div key={d.toISOString()} className="text-center text-xs font-mono text-muted uppercase tracking-wider">
@@ -373,34 +379,34 @@ export default function AdminPage() {
               </div>
               {/* User rows */}
               {allUsers.map((user, i) => (
-                <div key={user.id} className={`grid grid-cols-[1fr_repeat(5,_52px)] gap-2 px-6 py-3 items-center ${i < allUsers.length - 1 ? "border-b border-border/50" : ""}`}>
+                <div key={user.id} className={`grid grid-cols-[1fr_repeat(10,_44px)] gap-1 px-4 py-3 items-center ${i < allUsers.length - 1 ? "border-b border-border/50" : ""}`}>
                   <div className="text-sm font-body text-ink truncate">{user.display_name || user.email || user.id}</div>
                   {attendWeekDays.map(d => {
                     const status = getUserDayStatus(user.id, d);
                     const key = localDateKey(d);
                     const logged = (hoursByUserDate[user.id] || {})[key] || 0;
                     const target = targetHours(d);
-                    let cell = <div className="w-10 h-10 mx-auto rounded-lg bg-border/15" />;
+                    let cell = <div className="w-9 h-9 mx-auto rounded-lg bg-border/15" />;
                     if (status === "green") cell = (
-                      <div title={`${logged}h logged`} className="w-10 h-10 mx-auto rounded-lg bg-emerald-100 border border-emerald-200 flex items-center justify-center">
+                      <div title={`${logged}h logged`} className="w-9 h-9 mx-auto rounded-lg bg-emerald-100 border border-emerald-200 flex items-center justify-center">
                         <span className="text-[10px] font-mono text-emerald-700 font-medium">{logged}h</span>
                       </div>
                     );
                     if (status === "red") cell = (
-                      <div title={`${logged}h / ${target}h`} className="w-10 h-10 mx-auto rounded-lg bg-red-50 border border-red-200 flex items-center justify-center">
+                      <div title={`${logged}h / ${target}h`} className="w-9 h-9 mx-auto rounded-lg bg-red-50 border border-red-200 flex items-center justify-center">
                         <span className="text-[10px] font-mono text-red-500 font-medium">{logged > 0 ? `${logged}h` : "—"}</span>
                       </div>
                     );
-                    if (status === "future") cell = <div className="w-10 h-10 mx-auto rounded-lg bg-border/10 border border-dashed border-border/30" />;
+                    if (status === "future") cell = <div className="w-9 h-9 mx-auto rounded-lg bg-border/10 border border-dashed border-border/30" />;
                     return <div key={d.toISOString()}>{cell}</div>;
                   })}
                 </div>
               ))}
+            </div></div>
               {/* Legend */}
-              <div className="flex items-center gap-4 px-6 py-3 border-t border-border/50 bg-paper/30">
+              <div className="flex items-center gap-4 px-4 py-3 border-t border-border/50 bg-paper/30">
                 <span className="flex items-center gap-1.5 text-xs font-mono text-muted"><span className="w-3 h-3 rounded-sm bg-emerald-100 border border-emerald-200 inline-block"/>On target</span>
                 <span className="flex items-center gap-1.5 text-xs font-mono text-muted"><span className="w-3 h-3 rounded-sm bg-red-50 border border-red-200 inline-block"/>Missing / short</span>
-                <span className="flex items-center gap-1.5 text-xs font-mono text-muted"><span className="w-3 h-3 rounded-sm bg-border/15 inline-block"/>Weekend</span>
               </div>
             </div>
           )}
