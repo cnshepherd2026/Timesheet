@@ -31,7 +31,7 @@ export default function EntriesSection({
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-3">
           <h2 className="font-display text-lg font-bold">Entries</h2>
           <div className="flex items-center gap-1">
@@ -43,7 +43,7 @@ export default function EntriesSection({
               className="w-6 h-6 flex items-center justify-center rounded-md border border-border hover:border-ink text-muted hover:text-ink transition-all text-xs">›</button>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-lg border border-border overflow-hidden">
             <button onClick={() => setEntriesView("month")}
               className={`text-xs font-mono px-3 py-1.5 transition-colors ${entriesView === "month" ? "bg-ink text-paper" : "bg-paper text-muted hover:text-ink"}`}>
@@ -73,7 +73,7 @@ export default function EntriesSection({
 
       {/* Month view */}
       {entriesView === "month" ? (
-        <div className="bg-card border border-border rounded-2xl overflow-hidden">
+        <div className="bg-card border border-border rounded-2xl overflow-hidden w-full min-w-0">
           <div className="overflow-x-auto"><div className="min-w-[560px]">
             <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-paper/40">
               <span className="font-display font-bold text-sm">{calMonthLabel}</span>
