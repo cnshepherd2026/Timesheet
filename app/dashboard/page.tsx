@@ -15,7 +15,7 @@ export default function Dashboard() {
   const router = useRouter();
 
   const [user, setUser] = useState<{ email?: string; id?: string } | null>(null);
-  const [entriesCache, setEntriesCache] = useState<Record<string, Entry[]>>({});
+  const [entries, setEntries] = useState<Entry[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [monthLoading, setMonthLoading] = useState(false);
@@ -55,13 +55,11 @@ export default function Dashboard() {
     if (data && data.length > 0) setForm(f => ({ ...f, client: f.client || data[0].name }));
   }, [supabase]);
 
-  const fetchMonthEntries = useCallback(async (userId: string, year: number, month: number) => {
-    const prefix = `${year}-${String(month + 1).padStart(2, "0")}`;
+  const fetchEntries = useCallback(async (userId: string) => {
     const { data } = await supabase.from("timesheet_entries").select("*")
-      .eq("user_id", userId).gte("date", `${prefix}-01`).lte("date", `${prefix}-31`)
-      .order("date", { ascending: false });
+      .eq("user_id", userId).order("date", { ascending: false });
     const parsed = (data || []).map((e: any) => ({ ...e, hours: parseFloat(e.hours) }));
-    setEntriesCache(prev => ({ ...prev, [prefix]: parsed }));
+    setEntries(parsed);
     return parsed;
   }, [supabase]);
 
@@ -76,20 +74,11 @@ export default function Dashboard() {
         setIsAdmin(profile?.is_admin || false);
       }
       fetchClients();
-      const n = new Date();
-      fetchMonthEntries(session.user.id, n.getFullYear(), n.getMonth()).then(() => setLoading(false));
+      fetchEntries(session.user.id).then(() => setLoading(false));
     });
-  }, [supabase, router, fetchMonthEntries, fetchClients]);
+  }, [supabase, router, fetchEntries, fetchClients]);
 
-  // Fetch when month changes if not cached
-  useEffect(() => {
-    if (!user?.id) return;
-    const prefix = `${String(calMonth.year)}-${String(calMonth.month + 1).padStart(2, "0")}`;
-    if (entriesCache[prefix] !== undefined) return;
-    setMonthLoading(true);
-    fetchMonthEntries(user.id, calMonth.year, calMonth.month).finally(() => setMonthLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calMonth.year, calMonth.month, user?.id]);
+
 
   function toggleDarkMode() {
     const next = !darkMode;
@@ -121,7 +110,7 @@ export default function Dashboard() {
     const payload = { date: form.date, client: form.client, hours: parseFloat(form.hours), user_id: session.user.id, user_email: session.user.email };
     if (editId) { await supabase.from("timesheet_entries").update(payload).eq("id", editId); setSuccess("Entry updated!"); }
     else { await supabase.from("timesheet_entries").insert(payload); setSuccess("Hours logged!"); }
-    await fetchMonthEntries(session.user.id, calMonth.year, calMonth.month);
+    await fetchEntries(session.user.id);
     resetForm(); setSaving(false);
     setTimeout(() => setSuccess(""), 3000);
   }
@@ -129,7 +118,7 @@ export default function Dashboard() {
   async function handleDelete(id: string) {
     await supabase.from("timesheet_entries").delete().eq("id", id);
     const { data: { session } } = await supabase.auth.getSession();
-    if (session) fetchMonthEntries(session.user.id, calMonth.year, calMonth.month);
+    if (session) fetchEntries(session.user.id);
   }
 
   function exportCSV() {
@@ -170,7 +159,7 @@ export default function Dashboard() {
   }
 
   const calMonthPrefix = `${String(calMonth.year)}-${String(calMonth.month + 1).padStart(2, "0")}`;
-  const monthEntries = entriesCache[calMonthPrefix] || [];
+  const monthEntries = entries.filter(e => e.date.startsWith(calMonthPrefix));
   const calMonthLabel = new Date(calMonth.year, calMonth.month, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
   const filtered = filterClient === "All" ? monthEntries : monthEntries.filter(e => e.client === filterClient);
   const totalHours = filtered.reduce((s, e) => s + e.hours, 0);
@@ -301,7 +290,7 @@ export default function Dashboard() {
                 {handle}
                 <StatsBar
                   totalHours={totalHours} monthEntriesCount={monthEntries.length}
-                  calMonthLabel={calMonthLabel} entriesCache={entriesCache}
+                  calMonthLabel={calMonthLabel} allEntries={entries}
                 />
               </div>
             );
