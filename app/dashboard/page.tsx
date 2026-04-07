@@ -189,7 +189,7 @@ export default function Dashboard() {
       await supabase.from("timesheet_entries").insert(payload);
       setSuccess("Hours logged!");
     }
-    await fetchEntries(session.user.id);
+    await fetchMonthEntries(session.user.id, calMonth.year, calMonth.month);
     resetForm();
     setSaving(false);
     setTimeout(() => setSuccess(""), 3000);
