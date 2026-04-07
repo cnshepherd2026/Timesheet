@@ -47,9 +47,10 @@ export default function Dashboard() {
   const router = useRouter();
 
   const [user, setUser] = useState<{ email?: string; id?: string } | null>(null);
-  const [entries, setEntries] = useState<Entry[]>([]);
+  const [entriesCache, setEntriesCache] = useState<Record<string, Entry[]>>({}); // keyed by "YYYY-MM"
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
+  const [monthLoading, setMonthLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [filterClient, setFilterClient] = useState("All");
@@ -105,11 +106,19 @@ export default function Dashboard() {
     }
   }, [supabase]);
 
-  const fetchEntries = useCallback(async (userId: string) => {
+  const fetchMonthEntries = useCallback(async (userId: string, year: number, month: number) => {
+    const prefix = `${year}-${String(month + 1).padStart(2, "0")}`;
+    const monthStart = `${prefix}-01`;
+    const monthEnd = `${prefix}-31`; // Supabase will clamp to actual days
     const { data } = await supabase
-      .from("timesheet_entries").select("*").eq("user_id", userId).order("date", { ascending: false });
-    setEntries(data || []);
-    setLoading(false);
+      .from("timesheet_entries")
+      .select("*")
+      .eq("user_id", userId)
+      .gte("date", monthStart)
+      .lte("date", monthEnd)
+      .order("date", { ascending: false });
+    setEntriesCache(prev => ({ ...prev, [prefix]: data || [] }));
+    return data || [];
   }, [supabase]);
 
   useEffect(() => {
@@ -124,9 +133,20 @@ export default function Dashboard() {
         setIsAdmin(profile?.is_admin || false);
       }
       fetchClients();
-      fetchEntries(session.user.id);
+      const n = new Date();
+      fetchMonthEntries(session.user.id, n.getFullYear(), n.getMonth()).then(() => setLoading(false));
     });
-  }, [supabase, router, fetchEntries, fetchClients]);
+  }, [supabase, router, fetchMonthEntries, fetchClients]);
+
+  // Fetch entries when calendar month changes (if not already cached)
+  useEffect(() => {
+    if (!user?.id) return;
+    const prefix = `${String(calMonth.year)}-${String(calMonth.month + 1).padStart(2, "0")}`;
+    if (entriesCache[prefix] !== undefined) return; // already cached
+    setMonthLoading(true);
+    fetchMonthEntries(user.id, calMonth.year, calMonth.month)
+      .finally(() => setMonthLoading(false));
+  }, [calMonth.year, calMonth.month, user?.id, fetchMonthEntries]);
 
   async function handleSignOut() { await supabase.auth.signOut(); router.push("/login"); }
 
@@ -178,7 +198,7 @@ export default function Dashboard() {
   async function handleDelete(id: string) {
     await supabase.from("timesheet_entries").delete().eq("id", id);
     const { data: { session } } = await supabase.auth.getSession();
-    if (session) fetchEntries(session.user.id);
+    if (session) fetchMonthEntries(session.user.id, calMonth.year, calMonth.month);
   }
 
   function exportCSV() {
@@ -193,9 +213,13 @@ export default function Dashboard() {
     a.click(); URL.revokeObjectURL(url);
   }
 
-  // Build date -> hours map using the string key directly from DB (already YYYY-MM-DD)
+  // Get entries for the currently viewed month from cache
+  const calMonthPrefix = `${String(calMonth.year)}-${String(calMonth.month + 1).padStart(2, "0")}`;
+  const monthEntries = entriesCache[calMonthPrefix] || [];
+
+  // Build date -> hours map
   const hoursByDate: Record<string, number> = {};
-  entries.forEach(e => { hoursByDate[e.date] = (hoursByDate[e.date] || 0) + e.hours; });
+  monthEntries.forEach(e => { hoursByDate[e.date] = (hoursByDate[e.date] || 0) + e.hours; });
 
   function getDayStatus(date: Date): "green" | "red" | "weekend" | "future" {
     const target = targetHours(date);
@@ -205,10 +229,6 @@ export default function Dashboard() {
     const logged = hoursByDate[key] || 0;
     return logged >= target ? "green" : "red";
   }
-
-  // Filter entries by the calendar month
-  const calMonthPrefix = `${String(calMonth.year)}-${String(calMonth.month + 1).padStart(2, "0")}`;
-  const monthEntries = entries.filter(e => e.date.startsWith(calMonthPrefix));
 
   const filtered = (filterClient === "All" ? monthEntries : monthEntries.filter(e => e.client === filterClient));
   const totalHours = filtered.reduce((s, e) => s + e.hours, 0);
@@ -415,7 +435,7 @@ export default function Dashboard() {
           <div className="bg-accent/10 border border-accent/20 rounded-2xl p-5 col-span-2 sm:col-span-1">
             <p className="text-xs font-mono text-accent uppercase tracking-widest mb-1">This week</p>
             <p className="font-display text-3xl font-bold text-accent">
-              {entries.filter(e => {
+              {Object.values(entriesCache).flat().filter(e => {
                 const now = new Date();
                 const monday = new Date(now);
                 monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
@@ -459,6 +479,7 @@ export default function Dashboard() {
                 <button onClick={() => setCalMonth(m => { const d = new Date(m.year, m.month - 1, 1); return { year: d.getFullYear(), month: d.getMonth() }; })}
                   className="w-6 h-6 flex items-center justify-center rounded-md border border-border hover:border-ink text-muted hover:text-ink transition-all text-xs">‹</button>
                 <span className="text-sm font-mono text-muted px-1">{calMonthLabel}</span>
+                {monthLoading && <span className="text-xs font-mono text-muted animate-pulse">loading…</span>}
                 <button onClick={() => setCalMonth(m => { const d = new Date(m.year, m.month + 1, 1); return { year: d.getFullYear(), month: d.getMonth() }; })}
                   className="w-6 h-6 flex items-center justify-center rounded-md border border-border hover:border-ink text-muted hover:text-ink transition-all text-xs">›</button>
               </div>
