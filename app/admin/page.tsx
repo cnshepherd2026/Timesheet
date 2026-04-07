@@ -27,7 +27,7 @@ function getTwoWeekDays(twoWeekOffset: number): Date[] {
   // twoWeekOffset moves in 2-week blocks; find the Monday of the current 2-week period
   const now = new Date();
   const monday = new Date(now);
-  monday.setDate(now.getDate() - ((now.getDay() + 6) % 7) + twoWeekOffset * 10);
+  monday.setDate(now.getDate() - ((now.getDay() + 6) % 7) + twoWeekOffset * 14);
   monday.setHours(0, 0, 0, 0);
   // Return Mon-Fri of week 1 then Mon-Fri of week 2
   const days: Date[] = [];
@@ -368,20 +368,23 @@ export default function AdminPage() {
           ) : (
             <div className="bg-card border border-border rounded-2xl overflow-hidden">
               {/* Header row */}
-              <div className="overflow-x-auto"><div className="min-w-[700px]"><div className="grid grid-cols-[1fr_repeat(10,_44px)] gap-1 px-4 py-3 border-b border-border bg-paper/50">
+              <div className="overflow-x-auto"><div className="min-w-[700px]"><div className="grid grid-cols-[1fr_repeat(5,_44px)_8px_repeat(5,_44px)] gap-1 px-4 py-3 border-b border-border bg-paper/50">
                 <div className="text-xs font-mono text-muted uppercase tracking-widest">Person</div>
-                {attendWeekDays.map(d => (
-                  <div key={d.toISOString()} className="text-center text-xs font-mono text-muted uppercase tracking-wider">
-                    {d.toLocaleDateString("en-GB", { weekday: "short" })}
-                    <div className="text-[10px] text-muted/60">{d.getDate()}</div>
-                  </div>
+                {attendWeekDays.map((d, i) => (
+                  <>
+                    {i === 5 && <div key="divider-header" className="flex items-center justify-center"><div className="w-px h-6 bg-border/60"/></div>}
+                    <div key={d.toISOString()} className="text-center text-xs font-mono text-muted uppercase tracking-wider">
+                      {d.toLocaleDateString("en-GB", { weekday: "short" })}
+                      <div className="text-[10px] text-muted/60">{d.getDate()}</div>
+                    </div>
+                  </>
                 ))}
               </div>
               {/* User rows */}
               {allUsers.map((user, i) => (
-                <div key={user.id} className={`grid grid-cols-[1fr_repeat(10,_44px)] gap-1 px-4 py-3 items-center ${i < allUsers.length - 1 ? "border-b border-border/50" : ""}`}>
+                <div key={user.id} className={`grid grid-cols-[1fr_repeat(5,_44px)_8px_repeat(5,_44px)] gap-1 px-4 py-3 items-center ${i < allUsers.length - 1 ? "border-b border-border/50" : ""}`}>
                   <div className="text-sm font-body text-ink truncate">{user.display_name || user.email || user.id}</div>
-                  {attendWeekDays.map(d => {
+                  {attendWeekDays.map((d, i) => {
                     const status = getUserDayStatus(user.id, d);
                     const key = localDateKey(d);
                     const logged = (hoursByUserDate[user.id] || {})[key] || 0;
@@ -398,7 +401,12 @@ export default function AdminPage() {
                       </div>
                     );
                     if (status === "future") cell = <div className="w-9 h-9 mx-auto rounded-lg bg-border/10 border border-dashed border-border/30" />;
-                    return <div key={d.toISOString()}>{cell}</div>;
+                    return (
+                      <>
+                        {i === 5 && <div key="divider-cell" className="flex items-center justify-center"><div className="w-px h-9 bg-border/60"/></div>}
+                        <div key={d.toISOString()}>{cell}</div>
+                      </>
+                    );
                   })}
                 </div>
               ))}
