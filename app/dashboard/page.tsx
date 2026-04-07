@@ -60,8 +60,9 @@ export default function Dashboard() {
     const { data } = await supabase.from("timesheet_entries").select("*")
       .eq("user_id", userId).gte("date", `${prefix}-01`).lte("date", `${prefix}-31`)
       .order("date", { ascending: false });
-    setEntriesCache(prev => ({ ...prev, [prefix]: data || [] }));
-    return data || [];
+    const parsed = (data || []).map((e: any) => ({ ...e, hours: parseFloat(e.hours) }));
+    setEntriesCache(prev => ({ ...prev, [prefix]: parsed }));
+    return parsed;
   }, [supabase]);
 
   useEffect(() => {
@@ -87,7 +88,8 @@ export default function Dashboard() {
     if (entriesCache[prefix] !== undefined) return;
     setMonthLoading(true);
     fetchMonthEntries(user.id, calMonth.year, calMonth.month).finally(() => setMonthLoading(false));
-  }, [calMonth.year, calMonth.month, user?.id, fetchMonthEntries]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calMonth.year, calMonth.month, user?.id]);
 
   function toggleDarkMode() {
     const next = !darkMode;
