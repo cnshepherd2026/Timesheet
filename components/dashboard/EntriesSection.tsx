@@ -31,7 +31,7 @@ export default function EntriesSection({
   return (
     <div>
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <div className="flex items-center gap-3">
           <h2 className="font-display text-lg font-bold">Entries</h2>
           <div className="flex items-center gap-1">
@@ -43,7 +43,7 @@ export default function EntriesSection({
               className="w-6 h-6 flex items-center justify-center rounded-md border border-border hover:border-ink text-muted hover:text-ink transition-all text-xs">›</button>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <div className="flex rounded-lg border border-border overflow-hidden">
             <button onClick={() => setEntriesView("month")}
               className={`text-xs font-mono px-3 py-1.5 transition-colors ${entriesView === "month" ? "bg-ink text-paper" : "bg-paper text-muted hover:text-ink"}`}>

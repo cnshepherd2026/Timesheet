@@ -23,14 +23,14 @@ export default function LogHoursForm({ form, setForm, clients, saving, editId, i
           No activities set up yet. {isAdmin ? "Go to Admin to add some." : "Ask your administrator to add activities."}
         </p>
       ) : (
-        <form onSubmit={onSubmit} className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <form onSubmit={onSubmit} className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-xs font-mono text-muted uppercase tracking-widest mb-2">Date</label>
             <input type="date" required value={form.date}
               onChange={e => setForm({ ...form, date: e.target.value })}
               className="w-full px-4 py-3 rounded-xl border border-border bg-paper text-ink text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"/>
           </div>
-          <div>
+          <div className="col-span-2 sm:col-span-1">
             <label className="block text-xs font-mono text-muted uppercase tracking-widest mb-2">Activity</label>
             <select value={form.client} onChange={e => setForm({ ...form, client: e.target.value })}
               className="w-full px-4 py-3 rounded-xl border border-border bg-paper text-ink text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all">

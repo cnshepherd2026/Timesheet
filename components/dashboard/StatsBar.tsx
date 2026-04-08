@@ -24,7 +24,7 @@ export default function StatsBar({ totalHours, monthEntriesCount, calMonthLabel,
     .reduce((s, e) => s + e.hours, 0);
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 w-full">
       <div className="bg-card border border-border rounded-2xl p-5">
         <p className="text-xs font-mono text-muted uppercase tracking-widest mb-1">{calMonthLabel} hours</p>
         <p className="font-display text-3xl font-bold">{totalHours.toFixed(1)}</p>
@@ -33,7 +33,7 @@ export default function StatsBar({ totalHours, monthEntriesCount, calMonthLabel,
         <p className="text-xs font-mono text-muted uppercase tracking-widest mb-1">Entries</p>
         <p className="font-display text-3xl font-bold">{monthEntriesCount}</p>
       </div>
-      <div className="bg-accent/10 border border-accent/20 rounded-2xl p-5 col-span-2 sm:col-span-1">
+      <div className="bg-accent/10 border border-accent/20 rounded-2xl p-5 col-span-2 sm:col-span-1 [&>p:last-child]:text-2xl sm:[&>p:last-child]:text-3xl">
         <p className="text-xs font-mono text-accent uppercase tracking-widest mb-1">This week</p>
         <p className="font-display text-3xl font-bold text-accent">{thisWeek.toFixed(1)}h</p>
       </div>
