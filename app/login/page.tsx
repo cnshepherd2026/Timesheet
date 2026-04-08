@@ -63,7 +63,7 @@ function LoginForm() {
     <div className="relative w-full max-w-sm animate-fade-up">
       <div className="mb-10 text-center">
         <div className="mb-6">
-          <img src="/jym-logo.jpg" alt="JYM Partnership" className="h-14 w-auto object-contain mx-auto"/>
+          <img src="/JYM-Logo.jpg" alt="JYM Partnership" className="h-14 w-auto object-contain mx-auto"/>
         </div>
         <h1 className="font-display text-3xl font-bold text-ink leading-tight">
           {showForgot ? "Reset password" : "Welcome back"}
