@@ -24,7 +24,10 @@ export default function Dashboard() {
   const [filterClient, setFilterClient] = useState("All");
   const [success, setSuccess] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
-  const [entriesView, setEntriesView] = useState<"list" | "month">("month");
+  const [entriesView, setEntriesView] = useState<"list" | "month">(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 640) return "list";
+    return "month";
+  });
   const [darkMode, setDarkMode] = useState(() => {
     try { return typeof window !== "undefined" && localStorage.getItem("jym-dark-mode") === "true"; }
     catch { return false; }
