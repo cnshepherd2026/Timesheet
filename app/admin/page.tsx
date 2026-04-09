@@ -381,13 +381,13 @@ export default function AdminPage() {
             const month = baseDate.getMonth();
             const monthLabel = baseDate.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
 
-            // Get all working days in this month (Mon-Fri, excl bank holidays)
+            // Get all Mon-Fri days in this month (bank holidays included)
             const daysInMonth = new Date(year, month + 1, 0).getDate();
             const workingDays: Date[] = [];
             for (let d = 1; d <= daysInMonth; d++) {
               const date = new Date(year, month, d);
               const dow = date.getDay();
-              if (dow !== 0 && dow !== 6 && !isBankHoliday(date)) workingDays.push(date);
+              if (dow !== 0 && dow !== 6) workingDays.push(date);
             }
 
             // Group into weeks for dividers (new week = Monday)
@@ -412,7 +412,7 @@ export default function AdminPage() {
                       <div style={{ minWidth: `${minWidth}px` }}>
                         {/* Header */}
                         <div className="flex items-end gap-1 px-4 py-2 border-b border-border bg-paper/50">
-                          <div style={{ width: nameW }} className="text-xs font-mono text-muted uppercase tracking-widest shrink-0">Person</div>
+                          <div style={{ width: nameW, position: "sticky", left: 16, zIndex: 2, background: "var(--color-paper)" }} className="text-xs font-mono text-muted uppercase tracking-widest shrink-0">Person</div>
                           {workingDays.map((d, i) => {
                             const isMonday = d.getDay() === 1 && i > 0;
                             return (
@@ -434,7 +434,7 @@ export default function AdminPage() {
                           return (
                             <div key={user.id} className={`flex items-center gap-1 px-4 py-2 ${ui < allUsers.length - 1 ? "border-b border-border/50" : ""}`}>
                               <button onClick={() => router.push(`/admin/user/${user.id}`)}
-                                style={{ width: nameW }}
+                                style={{ width: nameW, position: "sticky", left: 16, zIndex: 1, background: "var(--color-card)" }}
                                 className="text-sm font-body text-ink truncate hover:text-accent transition-colors text-left shrink-0">
                                 {user.display_name || user.email || user.id}
                               </button>
@@ -472,7 +472,7 @@ export default function AdminPage() {
                         <div className="flex items-center gap-4 px-4 py-3 border-t border-border/50 bg-paper/30">
                           <span className="flex items-center gap-1.5 text-xs font-mono text-muted"><span className="w-3 h-3 rounded-sm bg-emerald-100 border border-emerald-200 inline-block"/>On target</span>
                           <span className="flex items-center gap-1.5 text-xs font-mono text-muted"><span className="w-3 h-3 rounded-sm bg-red-50 border border-red-200 inline-block"/>Missing / short</span>
-                          <span className="flex items-center gap-1.5 text-xs font-mono text-muted"><span className="w-3 h-3 rounded-sm bg-border/20 inline-block"/>Bank holiday</span>
+                          <span className="flex items-center gap-1.5 text-xs font-mono text-muted"><span className="w-3 h-3 rounded-sm bg-border/20 inline-block"/>BH — Bank holiday</span>
                         </div>
                       </div>
                     </div>
