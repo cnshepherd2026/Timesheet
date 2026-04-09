@@ -146,15 +146,7 @@ export default function Dashboard() {
     setSuccess("Password updated!"); setTimeout(() => setSuccess(""), 3000);
   }
 
-  function handleSectionDragStart(index: number, e: React.DragEvent) {
-    const target = e.target as HTMLElement;
-    const tag = target.tagName.toLowerCase();
-    if (tag === "input" || tag === "select" || tag === "textarea" || tag === "button") {
-      e.preventDefault();
-      return;
-    }
-    dragSectionItem.current = index;
-  }
+
   function handleSectionDragEnter(index: number) {
     if (dragSectionItem.current === null || dragSectionItem.current === index) return;
     const newOrder = [...sectionOrder];
@@ -185,16 +177,7 @@ export default function Dashboard() {
     </div>
   );
 
-  const handle = (
-    <div className="absolute -left-7 top-4 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing hidden lg:flex">
-      <svg width="10" height="16" viewBox="0 0 10 16" fill="none" className="text-muted/30">
-        <circle cx="3" cy="2" r="1.5" fill="currentColor"/><circle cx="7" cy="2" r="1.5" fill="currentColor"/>
-        <circle cx="3" cy="6" r="1.5" fill="currentColor"/><circle cx="7" cy="6" r="1.5" fill="currentColor"/>
-        <circle cx="3" cy="10" r="1.5" fill="currentColor"/><circle cx="7" cy="10" r="1.5" fill="currentColor"/>
-        <circle cx="3" cy="14" r="1.5" fill="currentColor"/><circle cx="7" cy="14" r="1.5" fill="currentColor"/>
-      </svg>
-    </div>
-  );
+  // handle is defined per-section in the map below
 
   return (
     <div className="min-h-screen">
@@ -280,15 +263,27 @@ export default function Dashboard() {
         <div className="space-y-8">
           {sectionOrder.map((sectionId, idx) => {
             const dragProps = {
-              draggable: true,
-              onDragStart: (e: React.DragEvent) => handleSectionDragStart(idx, e),
               onDragEnter: () => handleSectionDragEnter(idx),
-              onDragEnd: handleSectionDragEnd,
               onDragOver: (e: React.DragEvent) => e.preventDefault(),
             };
+            const handleDragProps = {
+              draggable: true,
+              onDragStart: () => { dragSectionItem.current = idx; },
+              onDragEnd: handleSectionDragEnd,
+            };
+            const sectionHandle = (
+              <div {...handleDragProps} className="absolute -left-7 top-4 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing hidden lg:flex">
+                <svg width="10" height="16" viewBox="0 0 10 16" fill="none" className="text-muted/30">
+                  <circle cx="3" cy="2" r="1.5" fill="currentColor"/><circle cx="7" cy="2" r="1.5" fill="currentColor"/>
+                  <circle cx="3" cy="6" r="1.5" fill="currentColor"/><circle cx="7" cy="6" r="1.5" fill="currentColor"/>
+                  <circle cx="3" cy="10" r="1.5" fill="currentColor"/><circle cx="7" cy="10" r="1.5" fill="currentColor"/>
+                  <circle cx="3" cy="14" r="1.5" fill="currentColor"/><circle cx="7" cy="14" r="1.5" fill="currentColor"/>
+                </svg>
+              </div>
+            );
             if (sectionId === "log") return (
               <div key="log" id="log-form" {...dragProps} className="group relative">
-                {handle}
+                {sectionHandle}
                 <LogHoursForm
                   form={form} setForm={setForm} clients={clients}
                   saving={saving} editId={editId} isAdmin={isAdmin}
@@ -298,7 +293,7 @@ export default function Dashboard() {
             );
             if (sectionId === "stats") return (
               <div key="stats" {...dragProps} className="group relative">
-                {handle}
+                {sectionHandle}
                 <StatsBar
                   totalHours={totalHours} monthEntriesCount={monthEntries.length}
                   calMonthLabel={calMonthLabel} allEntries={entries}
@@ -307,13 +302,13 @@ export default function Dashboard() {
             );
             if (sectionId === "breakdown") return clientTotals.length === 0 ? null : (
               <div key="breakdown" {...dragProps} className="group relative">
-                {handle}
+                {sectionHandle}
                 <ActivityBreakdown clientTotals={clientTotals} maxHours={maxHours}/>
               </div>
             );
             if (sectionId === "entries") return (
               <div key="entries" {...dragProps} className="group relative min-w-0">
-                {handle}
+                {sectionHandle}
                 <EntriesSection
                   monthEntries={monthEntries} filtered={filtered} clients={clients}
                   calMonth={calMonth} calMonthLabel={calMonthLabel}
