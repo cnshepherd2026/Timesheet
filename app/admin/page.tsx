@@ -390,9 +390,8 @@ export default function AdminPage() {
                     {i === 5 && <div key="divider-header" className="flex items-center justify-center"><div className="w-px h-6 bg-border/60"/></div>}
                     <div key={d.toISOString()} className="text-center text-xs font-mono text-muted uppercase tracking-wider">
                       {d.toLocaleDateString("en-GB", { weekday: "short" })}
-                      <div className={`text-[10px] ${isBankHoliday(d) ? "text-muted/40 font-medium" : "text-muted/60"}`}>
-                        {isBankHoliday(d) ? "BH" : d.getDate()}
-                      </div>
+                      <div className="text-[10px] text-muted/60">{d.getDate()}</div>
+                      {isBankHoliday(d) && <div className="text-[9px] text-muted/40 font-medium">BH</div>}
                     </div>
                   </>
                 ))}
