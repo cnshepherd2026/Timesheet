@@ -16,9 +16,23 @@ function localDateKey(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+const UK_BANK_HOLIDAYS = new Set([
+  "2025-01-01","2025-04-18","2025-04-21","2025-05-05","2025-05-26","2025-08-25","2025-12-25","2025-12-26",
+  "2026-01-01","2026-04-03","2026-04-06","2026-05-04","2026-05-25","2026-08-31","2026-12-25","2026-12-28",
+  "2027-01-01","2027-03-26","2027-03-29","2027-05-03","2027-05-31","2027-08-30","2027-12-27","2027-12-28",
+]);
+
+function isBankHoliday(date: Date): boolean {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return UK_BANK_HOLIDAYS.has(`${y}-${m}-${d}`);
+}
+
 function targetHours(date: Date): number {
   const day = date.getDay();
   if (day === 0 || day === 6) return 0;
+  if (isBankHoliday(date)) return 0;
   if (day === 5) return 7;
   return 8;
 }
@@ -259,7 +273,8 @@ export default function AdminPage() {
     return count;
   }
 
-  function getUserDayStatus(userId: string, date: Date): "green" | "red" | "future" | "weekend" {
+  function getUserDayStatus(userId: string, date: Date): "green" | "red" | "future" | "weekend" | "bank-holiday" {
+    if (isBankHoliday(date)) return "bank-holiday";
     const target = targetHours(date);
     if (target === 0) return "weekend";
     const todayStr = localDateKey(new Date());
@@ -375,7 +390,9 @@ export default function AdminPage() {
                     {i === 5 && <div key="divider-header" className="flex items-center justify-center"><div className="w-px h-6 bg-border/60"/></div>}
                     <div key={d.toISOString()} className="text-center text-xs font-mono text-muted uppercase tracking-wider">
                       {d.toLocaleDateString("en-GB", { weekday: "short" })}
-                      <div className="text-[10px] text-muted/60">{d.getDate()}</div>
+                      <div className={`text-[10px] ${isBankHoliday(d) ? "text-muted/40 font-medium" : "text-muted/60"}`}>
+                        {isBankHoliday(d) ? "BH" : d.getDate()}
+                      </div>
                     </div>
                   </>
                 ))}
@@ -401,6 +418,11 @@ export default function AdminPage() {
                       </div>
                     );
                     if (status === "future") cell = <div className="w-9 h-9 mx-auto rounded-lg bg-border/10 border border-dashed border-border/30" />;
+                    if (status === "bank-holiday") cell = (
+                      <div title="Bank holiday" className="w-9 h-9 mx-auto rounded-lg bg-border/20 flex items-center justify-center">
+                        <span className="text-[9px] font-mono text-muted/50 font-medium">BH</span>
+                      </div>
+                    );
                     return (
                       <>
                         {i === 5 && <div key="divider-cell" className="flex items-center justify-center"><div className="w-px h-9 bg-border/60"/></div>}
