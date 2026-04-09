@@ -391,7 +391,6 @@ export default function AdminPage() {
                     <div key={d.toISOString()} className="text-center text-xs font-mono text-muted uppercase tracking-wider">
                       {d.toLocaleDateString("en-GB", { weekday: "short" })}
                       <div className="text-[10px] text-muted/60">{d.getDate()}</div>
-                      {isBankHoliday(d) && <div className="text-[9px] text-muted/40 font-medium">BH</div>}
                     </div>
                   </>
                 ))}
