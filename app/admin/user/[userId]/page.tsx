@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase";
 import { useRouter, useParams } from "next/navigation";
-import { localDateKey, todayKey, targetHours, getCalendarMonth, Entry, Client } from "@/lib/dateUtils";
+import { localDateKey, todayKey, targetHours, getCalendarMonth, isBankHoliday, Entry, Client } from "@/lib/dateUtils";
 import ActivityBreakdown from "@/components/dashboard/ActivityBreakdown";
 
 const SUPER_ADMIN = "chris.shepherd@jympartnership.co.uk";
@@ -154,15 +154,25 @@ export default function AdminUserView() {
                       const isToday = key === todayKey();
                       const target = targetHours(date);
                       const isFuture = key > todayKey();
+                      const isBH = isBankHoliday(date);
                       const onTarget = target > 0 && dayTotal >= target;
                       let cellBg = "";
                       if (isWeekend) cellBg = "bg-paper/10";
+                      else if (isBH) cellBg = "bg-border/10";
                       else if (isFuture) cellBg = "";
                       else if (onTarget) cellBg = "bg-emerald-100 dark:bg-emerald-900/50";
                       else if (!isFuture && target > 0) cellBg = "bg-red-100 dark:bg-red-900/50";
                       if (isWeekend) return (
                         <div key={di} className={`border-r border-border/20 last:border-r-0 ${cellBg} flex flex-col items-center justify-start pt-1.5`}>
                           <span className="text-[9px] font-mono text-muted/30">{date.getDate()}</span>
+                        </div>
+                      );
+                      if (isBH) return (
+                        <div key={di} className={`min-h-[90px] border-r border-border/20 last:border-r-0 p-1.5 flex flex-col ${cellBg}`}>
+                          <div className="text-xs font-mono mb-1 w-5 h-5 flex items-center justify-center rounded-full shrink-0 text-muted/40">
+                            {date.getDate()}
+                          </div>
+                          <span className="text-[9px] font-mono text-muted/40 leading-tight">Bank holiday</span>
                         </div>
                       );
                       return (
