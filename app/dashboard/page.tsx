@@ -146,7 +146,15 @@ export default function Dashboard() {
     setSuccess("Password updated!"); setTimeout(() => setSuccess(""), 3000);
   }
 
-  function handleSectionDragStart(index: number) { dragSectionItem.current = index; }
+  function handleSectionDragStart(index: number, e: React.DragEvent) {
+    const target = e.target as HTMLElement;
+    const tag = target.tagName.toLowerCase();
+    if (tag === "input" || tag === "select" || tag === "textarea" || tag === "button") {
+      e.preventDefault();
+      return;
+    }
+    dragSectionItem.current = index;
+  }
   function handleSectionDragEnter(index: number) {
     if (dragSectionItem.current === null || dragSectionItem.current === index) return;
     const newOrder = [...sectionOrder];
@@ -273,7 +281,7 @@ export default function Dashboard() {
           {sectionOrder.map((sectionId, idx) => {
             const dragProps = {
               draggable: true,
-              onDragStart: () => handleSectionDragStart(idx),
+              onDragStart: (e: React.DragEvent) => handleSectionDragStart(idx, e),
               onDragEnter: () => handleSectionDragEnter(idx),
               onDragEnd: handleSectionDragEnd,
               onDragOver: (e: React.DragEvent) => e.preventDefault(),
