@@ -355,89 +355,132 @@ export default function AdminPage() {
           <div className="animate-fade-in fixed top-6 right-6 z-50 bg-ink text-paper text-sm font-mono px-4 py-2.5 rounded-xl shadow-xl">✓ {success}</div>
         )}
 
-        {/* ── ATTENDANCE OVERVIEW ── */}
+        {/* ── USER SUMMARY ── */}
         <section className="animate-fade-up space-y-5">
           <div className="flex items-end justify-between">
             <div>
               <h1 className="font-display text-4xl font-bold text-ink">User Summary</h1>
-              <p className="text-sm text-muted mt-1">Two-week view of daily hours per team member. Mon–Thu 8h · Fri 7h</p>
+              <p className="text-sm text-muted mt-1">Monthly hours per team member. Mon–Thu 8h · Fri 7h</p>
             </div>
             <div className="flex items-center gap-1">
               <button onClick={() => setAttendWeekOffset(o => o - 1)}
                 className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all text-sm">‹</button>
               <button onClick={() => setAttendWeekOffset(0)}
-                className="text-xs font-mono px-3 py-1.5 rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all">Current</button>
+                className="text-xs font-mono px-3 py-1.5 rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all">This month</button>
               <button onClick={() => setAttendWeekOffset(o => o + 1)}
                 className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all text-sm">›</button>
             </div>
           </div>
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-ink/5 border border-border rounded-lg">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-muted shrink-0"><rect x="1" y="2" width="10" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M1 5h10M4 1v2M8 1v2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-            <span className="text-xs font-mono font-medium text-ink">{weekLabel}</span>
-          </div>
 
-          {allUsers.length === 0 ? (
-            <div className="bg-card border border-border rounded-2xl p-10 text-center">
-              <p className="text-sm text-muted">No users have logged time yet.</p>
-            </div>
-          ) : (
-            <div className="bg-card border border-border rounded-2xl overflow-hidden">
-              {/* Header row */}
-              <div className="overflow-x-auto"><div className="min-w-[700px]"><div className="grid grid-cols-[1fr_repeat(5,_44px)_8px_repeat(5,_44px)] gap-1 px-4 py-3 border-b border-border bg-paper/50">
-                <div className="text-xs font-mono text-muted uppercase tracking-widest">Person</div>
-                {attendWeekDays.map((d, i) => (
-                  <>
-                    {i === 5 && <div key="divider-header" className="flex items-center justify-center"><div className="w-px h-6 bg-border/60"/></div>}
-                    <div key={d.toISOString()} className="text-center text-xs font-mono text-muted uppercase tracking-wider">
-                      {d.toLocaleDateString("en-GB", { weekday: "short" })}
-                      <div className="text-[10px] text-muted/60">{d.getDate()}</div>
-                    </div>
-                  </>
-                ))}
-              </div>
-              {/* User rows */}
-              {allUsers.map((user, i) => (
-                <div key={user.id} className={`grid grid-cols-[1fr_repeat(5,_44px)_8px_repeat(5,_44px)] gap-1 px-4 py-3 items-center ${i < allUsers.length - 1 ? "border-b border-border/50" : ""}`}>
-                  <button onClick={() => router.push(`/admin/user/${user.id}`)} className="text-sm font-body text-ink truncate hover:text-accent transition-colors text-left">{user.display_name || user.email || user.id}</button>
-                  {attendWeekDays.map((d, i) => {
-                    const status = getUserDayStatus(user.id, d);
-                    const key = localDateKey(d);
-                    const logged = (hoursByUserDate[user.id] || {})[key] || 0;
-                    const target = targetHours(d);
-                    let cell = <div className="w-9 h-9 mx-auto rounded-lg bg-border/15" />;
-                    if (status === "green") cell = (
-                      <div title={`${logged}h logged`} className="w-9 h-9 mx-auto rounded-lg bg-emerald-100 border border-emerald-200 flex items-center justify-center">
-                        <span className="text-[10px] font-mono text-emerald-700 font-medium">{logged}h</span>
-                      </div>
-                    );
-                    if (status === "red") cell = (
-                      <div title={`${logged}h / ${target}h`} className="w-9 h-9 mx-auto rounded-lg bg-red-50 border border-red-200 flex items-center justify-center">
-                        <span className="text-[10px] font-mono text-red-500 font-medium">{logged > 0 ? `${logged}h` : "—"}</span>
-                      </div>
-                    );
-                    if (status === "future") cell = <div className="w-9 h-9 mx-auto rounded-lg bg-border/10 border border-dashed border-border/30" />;
-                    if (status === "bank-holiday") cell = (
-                      <div title="Bank holiday" className="w-9 h-9 mx-auto rounded-lg bg-border/20 flex items-center justify-center">
-                        <span className="text-[9px] font-mono text-muted/50 font-medium">BH</span>
-                      </div>
-                    );
-                    return (
-                      <>
-                        {i === 5 && <div key="divider-cell" className="flex items-center justify-center"><div className="w-px h-9 bg-border/60"/></div>}
-                        <div key={d.toISOString()}>{cell}</div>
-                      </>
-                    );
-                  })}
+          {(() => {
+            // Compute the month from offset (0 = current month)
+            const baseDate = new Date();
+            baseDate.setDate(1);
+            baseDate.setMonth(baseDate.getMonth() + attendWeekOffset);
+            const year = baseDate.getFullYear();
+            const month = baseDate.getMonth();
+            const monthLabel = baseDate.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+
+            // Get all working days in this month (Mon-Fri, excl bank holidays)
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const workingDays: Date[] = [];
+            for (let d = 1; d <= daysInMonth; d++) {
+              const date = new Date(year, month, d);
+              const dow = date.getDay();
+              if (dow !== 0 && dow !== 6 && !isBankHoliday(date)) workingDays.push(date);
+            }
+
+            // Group into weeks for dividers (new week = Monday)
+            const todayStr = localDateKey(new Date());
+            const cellW = 36; // px per day cell
+            const nameW = 140; // px for name column
+            const minWidth = nameW + workingDays.length * (cellW + 4) + 32;
+
+            return (
+              <>
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-ink/5 border border-border rounded-lg">
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-muted shrink-0"><rect x="1" y="2" width="10" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M1 5h10M4 1v2M8 1v2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                  <span className="text-xs font-mono font-medium text-ink">{monthLabel}</span>
                 </div>
-              ))}
-            </div></div>
-              {/* Legend */}
-              <div className="flex items-center gap-4 px-4 py-3 border-t border-border/50 bg-paper/30">
-                <span className="flex items-center gap-1.5 text-xs font-mono text-muted"><span className="w-3 h-3 rounded-sm bg-emerald-100 border border-emerald-200 inline-block"/>On target</span>
-                <span className="flex items-center gap-1.5 text-xs font-mono text-muted"><span className="w-3 h-3 rounded-sm bg-red-50 border border-red-200 inline-block"/>Missing / short</span>
-              </div>
-            </div>
-          )}
+                {allUsers.length === 0 ? (
+                  <div className="bg-card border border-border rounded-2xl p-10 text-center">
+                    <p className="text-sm text-muted">No users have logged time yet.</p>
+                  </div>
+                ) : (
+                  <div className="bg-card border border-border rounded-2xl overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <div style={{ minWidth: `${minWidth}px` }}>
+                        {/* Header */}
+                        <div className="flex items-end gap-1 px-4 py-2 border-b border-border bg-paper/50">
+                          <div style={{ width: nameW }} className="text-xs font-mono text-muted uppercase tracking-widest shrink-0">Person</div>
+                          {workingDays.map((d, i) => {
+                            const isMonday = d.getDay() === 1 && i > 0;
+                            return (
+                              <div key={d.toISOString()} className="flex items-end gap-1">
+                                {isMonday && <div className="w-px h-6 bg-border/50 self-center mx-0.5"/>}
+                                <div style={{ width: cellW }} className={`text-center text-[10px] font-mono shrink-0 ${localDateKey(d) === todayStr ? "text-accent font-semibold" : "text-muted"}`}>
+                                  <div>{d.toLocaleDateString("en-GB", { weekday: "short" })}</div>
+                                  <div>{d.getDate()}</div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                          <div style={{ width: cellW }} className="text-center text-[10px] font-mono text-muted shrink-0">Total</div>
+                        </div>
+                        {/* User rows */}
+                        {allUsers.map((user, ui) => {
+                          const userHours = hoursByUserDate[user.id] || {};
+                          const monthTotal = workingDays.reduce((s, d) => s + (userHours[localDateKey(d)] || 0), 0);
+                          return (
+                            <div key={user.id} className={`flex items-center gap-1 px-4 py-2 ${ui < allUsers.length - 1 ? "border-b border-border/50" : ""}`}>
+                              <button onClick={() => router.push(`/admin/user/${user.id}`)}
+                                style={{ width: nameW }}
+                                className="text-sm font-body text-ink truncate hover:text-accent transition-colors text-left shrink-0">
+                                {user.display_name || user.email || user.id}
+                              </button>
+                              {workingDays.map((d, i) => {
+                                const key = localDateKey(d);
+                                const isMonday = d.getDay() === 1 && i > 0;
+                                const status = getUserDayStatus(user.id, d);
+                                const logged = userHours[key] || 0;
+                                const target = targetHours(d);
+                                let bg = "bg-border/15";
+                                let text = "";
+                                let textColor = "text-muted";
+                                if (status === "green") { bg = "bg-emerald-100 border border-emerald-200"; text = `${logged}h`; textColor = "text-emerald-700"; }
+                                if (status === "red") { bg = "bg-red-50 border border-red-200"; text = logged > 0 ? `${logged}h` : "—"; textColor = "text-red-500"; }
+                                if (status === "future") { bg = "bg-border/10 border border-dashed border-border/30"; }
+                                if (status === "bank-holiday") { bg = "bg-border/20"; text = "BH"; textColor = "text-muted/40"; }
+                                return (
+                                  <div key={key} className="flex items-center gap-1">
+                                    {isMonday && <div className="w-px h-8 bg-border/50 mx-0.5"/>}
+                                    <div style={{ width: cellW }} title={target > 0 ? `${logged}h / ${target}h` : undefined}
+                                      className={`h-8 rounded-md ${bg} flex items-center justify-center shrink-0`}>
+                                      <span className={`text-[10px] font-mono font-medium ${textColor}`}>{text}</span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                              {/* Monthly total */}
+                              <div style={{ width: cellW }} className="h-8 rounded-md bg-ink/5 flex items-center justify-center shrink-0 ml-1">
+                                <span className="text-[10px] font-mono font-semibold text-ink">{monthTotal.toFixed(0)}h</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {/* Legend */}
+                        <div className="flex items-center gap-4 px-4 py-3 border-t border-border/50 bg-paper/30">
+                          <span className="flex items-center gap-1.5 text-xs font-mono text-muted"><span className="w-3 h-3 rounded-sm bg-emerald-100 border border-emerald-200 inline-block"/>On target</span>
+                          <span className="flex items-center gap-1.5 text-xs font-mono text-muted"><span className="w-3 h-3 rounded-sm bg-red-50 border border-red-200 inline-block"/>Missing / short</span>
+                          <span className="flex items-center gap-1.5 text-xs font-mono text-muted"><span className="w-3 h-3 rounded-sm bg-border/20 inline-block"/>Bank holiday</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
           {/* Inactive users alert */}
           <div className="bg-card border border-border rounded-2xl p-5">
             <div className="flex items-center justify-between mb-4">
