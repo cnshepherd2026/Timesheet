@@ -8,6 +8,15 @@ const SUPER_ADMIN = "chris.shepherd@jympartnership.co.uk";
 type Client = { id: string; name: string; sort_order: number };
 type Entry = { id: string; date: string; client: string; hours: number; user_id: string; user_email: string };
 type Profile = { id: string; display_name: string | null; email: string; is_admin: boolean; created_at?: string };
+type TabId = "overview" | "report" | "search" | "people" | "activities";
+
+const TABS: { id: TabId; label: string }[] = [
+  { id: "overview", label: "Overview" },
+  { id: "report", label: "Time Report" },
+  { id: "search", label: "Client Search" },
+  { id: "people", label: "People" },
+  { id: "activities", label: "Activities" },
+];
 
 function localDateKey(date: Date): string {
   const y = date.getFullYear();
@@ -70,6 +79,18 @@ export default function AdminPage() {
   const [filterMonth, setFilterMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [editingName, setEditingName] = useState<Record<string, string>>({});
   const [attendWeekOffset, setAttendWeekOffset] = useState(0);
+  const [activeTab, setActiveTab] = useState<TabId>(() => {
+    try {
+      const saved = typeof window !== "undefined" ? localStorage.getItem("jym-admin-tab") : null;
+      if (saved && ["overview", "report", "search", "people", "activities"].includes(saved)) return saved as TabId;
+    } catch {}
+    return "overview";
+  });
+  // Client Search state
+  const [searchClient, setSearchClient] = useState("");
+  const [searchPreset, setSearchPreset] = useState<"month" | "year" | "all" | "custom">("month");
+  const [searchFrom, setSearchFrom] = useState("");
+  const [searchTo, setSearchTo] = useState("");
   const [inactiveThreshold, setInactiveThreshold] = useState<10 | 22>(() => {
     try {
       const saved = typeof window !== "undefined" ? localStorage.getItem("jym-inactive-threshold") : null;
@@ -77,6 +98,11 @@ export default function AdminPage() {
     } catch {}
     return 10;
   });
+
+  function selectTab(id: TabId) {
+    setActiveTab(id);
+    try { localStorage.setItem("jym-admin-tab", id); } catch {}
+  }
 
   function toggleInactiveThreshold() {
     const next = inactiveThreshold === 10 ? 22 : 10;
@@ -242,6 +268,17 @@ export default function AdminPage() {
     a.click(); URL.revokeObjectURL(url);
   }
 
+  function exportSearchCSV() {
+    const rows = [["Date", "Person", "Activity", "Hours"]];
+    searchEntries.forEach(e => rows.push([e.date, getDisplayName(e.user_id, e.user_email), e.client, String(e.hours)]));
+    const csv = rows.map(r => r.map(v => `"${v}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url;
+    a.download = `timesheet-${(searchClient || "client").replace(/\s+/g, "-")}-${searchPreset}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  }
+
   // Attendance helpers
   const hoursByUserDate: Record<string, Record<string, number>> = {};
   entries.forEach(e => {
@@ -318,6 +355,39 @@ export default function AdminPage() {
     return d.toISOString().slice(0, 7);
   });
 
+  // ── Client Search computations ──
+  function getSearchRange(): { from: string | null; to: string | null } {
+    const now = new Date();
+    if (searchPreset === "month") {
+      const from = localDateKey(new Date(now.getFullYear(), now.getMonth(), 1));
+      const to = localDateKey(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+      return { from, to };
+    }
+    if (searchPreset === "year") {
+      return { from: `${now.getFullYear()}-01-01`, to: `${now.getFullYear()}-12-31` };
+    }
+    if (searchPreset === "all") return { from: null, to: null };
+    return { from: searchFrom || null, to: searchTo || null };
+  }
+  const searchRange = getSearchRange();
+  const searchEntries = searchClient
+    ? entries.filter(e => e.client === searchClient
+        && (!searchRange.from || e.date >= searchRange.from)
+        && (!searchRange.to || e.date <= searchRange.to))
+    : [];
+  const searchTotalHours = searchEntries.reduce((s, e) => s + e.hours, 0);
+  const searchByPersonMap: Record<string, { name: string; hours: number }> = {};
+  searchEntries.forEach(e => {
+    if (!searchByPersonMap[e.user_id]) searchByPersonMap[e.user_id] = { name: getDisplayName(e.user_id, e.user_email), hours: 0 };
+    searchByPersonMap[e.user_id].hours += e.hours;
+  });
+  const searchByPerson = Object.values(searchByPersonMap).sort((a, b) => b.hours - a.hours);
+  const searchByMonthMap: Record<string, number> = {};
+  searchEntries.forEach(e => { const k = e.date.slice(0, 7); searchByMonthMap[k] = (searchByMonthMap[k] || 0) + e.hours; });
+  const searchByMonth = Object.entries(searchByMonthMap).sort((a, b) => a[0].localeCompare(b[0]));
+  const searchMaxPerson = Math.max(...searchByPerson.map(p => p.hours), 1);
+  const searchMaxMonth = Math.max(...searchByMonth.map(m => m[1]), 1);
+
   // All users who have a profile (show everyone, even if no entries yet)
   const allUsers = profiles;
 
@@ -338,24 +408,38 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src="/JYM-Logo.jpg" alt="JYM Partnership" className="h-8 w-auto object-contain"/>
-            <span className="font-display font-semibold text-sm text-ink hidden sm:block">Timesheet</span>
-            <span className="text-xs font-mono text-muted bg-border/60 px-2 py-0.5 rounded-md">Admin</span>
+      <div className="sticky top-0 z-20">
+        <header className="border-b border-border bg-card/80 backdrop-blur-sm">
+          <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <img src="/JYM-Logo.jpg" alt="JYM Partnership" className="h-8 w-auto object-contain"/>
+              <span className="font-display font-semibold text-sm text-ink hidden sm:block">Timesheet</span>
+              <span className="text-xs font-mono text-muted bg-border/60 px-2 py-0.5 rounded-md">Admin</span>
+            </div>
+            <button onClick={() => router.push("/dashboard")} className="text-xs font-mono text-muted hover:text-ink transition-colors">← Back to timesheet</button>
           </div>
-          <button onClick={() => router.push("/dashboard")} className="text-xs font-mono text-muted hover:text-ink transition-colors">← Back to timesheet</button>
+        </header>
+        {/* Tab bar */}
+        <div className="border-b border-border bg-card/70 backdrop-blur-sm">
+          <div className="max-w-4xl mx-auto px-4 flex gap-1 overflow-x-auto">
+            {TABS.map(t => (
+              <button key={t.id} onClick={() => selectTab(t.id)}
+                className={`text-xs font-mono px-4 py-2 my-2 rounded-lg whitespace-nowrap transition-colors ${activeTab === t.id ? "bg-ink text-paper font-semibold" : "text-muted hover:text-ink hover:bg-border/40"}`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </header>
+      </div>
 
-      <main className="max-w-4xl mx-auto px-6 py-10 space-y-12">
+      <main className="max-w-4xl mx-auto px-6 py-10">
 
         {success && (
           <div className="animate-fade-in fixed top-6 right-6 z-50 bg-ink text-paper text-sm font-mono px-4 py-2.5 rounded-xl shadow-xl">✓ {success}</div>
         )}
 
-        {/* ── USER SUMMARY ── */}
+        {/* ── OVERVIEW (USER SUMMARY) ── */}
+        {activeTab === "overview" && (
         <section className="animate-fade-up space-y-5">
           <div className="flex items-end justify-between">
             <div>
@@ -530,12 +614,14 @@ export default function AdminPage() {
             )}
           </div>
         </section>
+        )}
 
         {/* ── TIME REPORT ── */}
-        <section className="border-t border-border pt-10 animate-fade-up space-y-6">
+        {activeTab === "report" && (
+        <section className="animate-fade-up space-y-6">
           <div className="flex items-end justify-between">
             <div>
-              <h2 className="font-display text-2xl font-bold text-ink">Time Report</h2>
+              <h1 className="font-display text-4xl font-bold text-ink">Time Report</h1>
               <p className="text-sm text-muted mt-1">All staff hours across activities.</p>
             </div>
             <button onClick={exportReportCSV}
@@ -621,6 +707,117 @@ export default function AdminPage() {
             </div>
           )}
         </section>
+        )}
+
+        {/* ── CLIENT SEARCH ── */}
+        {activeTab === "search" && (
+        <section className="animate-fade-up space-y-6">
+          <div>
+            <p className="text-xs font-mono text-accent uppercase tracking-widest mb-1">Reporting</p>
+            <h1 className="font-display text-4xl font-bold text-ink">Client Search</h1>
+            <p className="text-sm text-muted mt-1">Pick one client and drill into its hours.</p>
+          </div>
+
+          <div className="flex items-end gap-3 flex-wrap">
+            <div>
+              <label className="block text-xs font-mono text-muted uppercase tracking-widest mb-2">Client</label>
+              <select value={searchClient} onChange={e => setSearchClient(e.target.value)}
+                className="text-sm font-body px-3 py-2 rounded-lg border border-border bg-paper text-ink focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all min-w-[200px]">
+                <option value="">Select a client…</option>
+                {clients.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-mono text-muted uppercase tracking-widest mb-2">Range</label>
+              <div className="flex rounded-lg border border-border overflow-hidden">
+                {(["month", "year", "all", "custom"] as const).map(p => (
+                  <button key={p} onClick={() => setSearchPreset(p)}
+                    className={`text-xs font-mono px-3 py-1.5 transition-colors ${searchPreset === p ? "bg-ink text-paper" : "bg-paper text-muted hover:text-ink"}`}>
+                    {p === "month" ? "This month" : p === "year" ? "This year" : p === "all" ? "All time" : "Custom"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {searchPreset === "custom" && (
+              <div className="flex items-center gap-2">
+                <input type="date" value={searchFrom} onChange={e => setSearchFrom(e.target.value)}
+                  className="text-xs font-mono px-3 py-1.5 rounded-lg border border-border bg-paper text-ink focus:outline-none focus:border-ink transition-all"/>
+                <span className="text-xs text-muted">to</span>
+                <input type="date" value={searchTo} onChange={e => setSearchTo(e.target.value)}
+                  className="text-xs font-mono px-3 py-1.5 rounded-lg border border-border bg-paper text-ink focus:outline-none focus:border-ink transition-all"/>
+              </div>
+            )}
+            {searchClient && searchEntries.length > 0 && (
+              <button onClick={exportSearchCSV}
+                className="ml-auto text-xs font-mono px-3 py-1.5 border border-border rounded-lg hover:border-ink hover:text-ink text-muted transition-all flex items-center gap-1.5">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v7M3 5l3 3 3-3M1 10h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                Export CSV
+              </button>
+            )}
+          </div>
+
+          {!searchClient ? (
+            <div className="bg-card border border-border rounded-2xl p-12 text-center">
+              <p className="text-sm text-muted">Choose a client above to see its hours.</p>
+            </div>
+          ) : searchEntries.length === 0 ? (
+            <div className="bg-card border border-border rounded-2xl p-12 text-center">
+              <p className="text-sm text-muted">No hours logged for {searchClient} in this range.</p>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-accent/8 border border-accent/20 rounded-2xl p-5">
+                  <p className="text-xs font-mono text-accent uppercase tracking-widest mb-1">Total hours</p>
+                  <p className="font-display text-3xl font-bold text-accent">{searchTotalHours.toFixed(1)}</p>
+                </div>
+                <div className="bg-card border border-border rounded-2xl p-5">
+                  <p className="text-xs font-mono text-muted uppercase tracking-widest mb-1">People</p>
+                  <p className="font-display text-3xl font-bold">{searchByPerson.length}</p>
+                </div>
+                <div className="bg-card border border-border rounded-2xl p-5">
+                  <p className="text-xs font-mono text-muted uppercase tracking-widest mb-1">Months active</p>
+                  <p className="font-display text-3xl font-bold">{searchByMonth.length}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* By person */}
+                <div className="bg-card border border-border rounded-2xl p-6">
+                  <h3 className="font-display font-bold text-sm mb-4">By person</h3>
+                  <div className="space-y-3">
+                    {searchByPerson.map(p => (
+                      <div key={p.name} className="flex items-center gap-3">
+                        <span className="w-28 text-sm font-body text-ink truncate">{p.name}</span>
+                        <div className="flex-1 bg-border/40 rounded-full h-2 overflow-hidden">
+                          <div className="h-full bg-accent rounded-full" style={{ width: `${(p.hours / searchMaxPerson) * 100}%` }}/>
+                        </div>
+                        <span className="w-12 text-right text-xs font-mono text-muted">{p.hours.toFixed(1)}h</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {/* By month */}
+                <div className="bg-card border border-border rounded-2xl p-6">
+                  <h3 className="font-display font-bold text-sm mb-4">By month</h3>
+                  <div className="flex items-end gap-2 h-32">
+                    {searchByMonth.map(([m, h]) => (
+                      <div key={m} title={`${h.toFixed(1)}h`} className="flex-1 bg-accent rounded-t-md min-h-[2px]" style={{ height: `${(h / searchMaxMonth) * 100}%` }}/>
+                    ))}
+                  </div>
+                  <div className="flex gap-2 mt-2">
+                    {searchByMonth.map(([m]) => (
+                      <div key={m} className="flex-1 text-center text-[10px] font-mono text-muted">
+                        {new Date(m + "-01").toLocaleDateString("en-GB", { month: "short" })}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </section>
+        )}
 
         {/* Confirm delete user modal */}
         {confirmDeleteUser && (
@@ -643,9 +840,10 @@ export default function AdminPage() {
         )}
 
         {/* ── MANAGE PEOPLE ── */}
-        <section className="border-t border-border pt-10 space-y-6 animate-fade-up">
+        {activeTab === "people" && (
+        <section className="space-y-6 animate-fade-up">
           <div>
-            <h2 className="font-display text-2xl font-bold text-ink">Manage People</h2>
+            <h1 className="font-display text-4xl font-bold text-ink">Manage People</h1>
             <p className="text-sm text-muted mt-1">Invite team members, set display names, and manage admin access.</p>
           </div>
 
@@ -709,11 +907,13 @@ export default function AdminPage() {
             </div>
           )}
         </section>
+        )}
 
         {/* ── MANAGE ACTIVITIES ── */}
-        <section className="border-t border-border pt-10 space-y-6 animate-fade-up">
+        {activeTab === "activities" && (
+        <section className="space-y-6 animate-fade-up">
           <div>
-            <h2 className="font-display text-2xl font-bold text-ink">Manage Activities</h2>
+            <h1 className="font-display text-4xl font-bold text-ink">Manage Activities</h1>
             <p className="text-sm text-muted mt-1">Add clients, leave types, or any activity. Drag to reorder.</p>
           </div>
 
@@ -762,6 +962,7 @@ export default function AdminPage() {
             <p className="text-xs font-mono text-muted mt-3">↕ Drag rows to reorder — order is saved automatically</p>
           </div>
         </section>
+        )}
 
       </main>
     </div>
