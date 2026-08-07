@@ -24,7 +24,7 @@ export default function EntriesSection({
   entriesView, filterClient, setEntriesView, setFilterClient, setCalMonth,
   onEdit, onDelete, onExportCSV, onDateClick,
 }: Props) {
-  const gridCols = "grid-cols-[1fr_1fr_1fr_1fr_1fr_28px_28px]";
+  const gridCols = "grid-cols-[1fr_1fr_1fr_1fr_1fr_32px_32px]";
   const weeks = getCalendarMonth(calMonth.year, calMonth.month);
   const monthTotal = monthEntries.reduce((s, e) => s + e.hours, 0);
 
@@ -74,14 +74,14 @@ export default function EntriesSection({
       {/* Month view */}
       {entriesView === "month" ? (
         <div className="bg-card border border-border rounded-2xl overflow-hidden w-full min-w-0">
-          <div className="overflow-x-auto"><div className="min-w-[560px]">
+          <div className="overflow-x-auto"><div className="min-w-[720px]">
             <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-paper/40">
               <span className="font-display font-bold text-sm">{calMonthLabel}</span>
               <span className="text-xs font-mono font-medium text-ink">{monthTotal.toFixed(1)}h total</span>
             </div>
             <div className={`grid ${gridCols} border-b border-border`}>
               {["Mon","Tue","Wed","Thu","Fri","Sa","Su"].map((d, i) => (
-                <div key={d} className={`text-center text-xs font-mono uppercase tracking-wider py-2 ${i >= 5 ? "text-muted/30 text-[9px]" : "text-muted"}`}>{d}</div>
+                <div key={d} className={`text-center text-sm font-mono uppercase tracking-wider py-2 ${i >= 5 ? "text-muted/30 text-[10px]" : "text-muted"}`}>{d}</div>
               ))}
             </div>
             <div>
@@ -89,7 +89,7 @@ export default function EntriesSection({
                 <div key={wi} className={`grid ${gridCols} ${wi < weeks.length - 1 ? "border-b border-border/40" : ""}`}>
                   {week.map((date, di) => {
                     const isWeekend = di >= 5;
-                    if (!date) return <div key={di} className={`border-r border-border/20 last:border-r-0 bg-paper/10 ${isWeekend ? "" : "min-h-[90px]"}`}/>;
+                    if (!date) return <div key={di} className={`border-r border-border/20 last:border-r-0 bg-paper/10 ${isWeekend ? "" : "min-h-[112px]"}`}/>;
                     const key = localDateKey(date);
                     const dayEntries = monthEntries.filter(e => e.date === key);
                     const dayTotal = dayEntries.reduce((s, e) => s + e.hours, 0);
@@ -107,28 +107,28 @@ export default function EntriesSection({
                     else if (isPastOrToday && target > 0) cellBg = "bg-red-100 dark:bg-red-900/50";
                     if (isWeekend) return (
                       <div key={di} className={`border-r border-border/20 last:border-r-0 ${cellBg} flex flex-col items-center justify-start pt-1.5`}>
-                        <span className="text-[9px] font-mono text-muted/30">{date.getDate()}</span>
+                        <span className="text-[10px] font-mono text-muted/30">{date.getDate()}</span>
                       </div>
                     );
                     if (isBH) return (
-                      <div key={di} className={`min-h-[90px] border-r border-border/20 last:border-r-0 p-1.5 flex flex-col ${cellBg}`}>
-                        <div className="text-xs font-mono mb-1 w-5 h-5 flex items-center justify-center rounded-full shrink-0 text-muted/40">
+                      <div key={di} className={`min-h-[112px] border-r border-border/20 last:border-r-0 p-1.5 flex flex-col ${cellBg}`}>
+                        <div className="text-sm font-mono mb-1 w-6 h-6 flex items-center justify-center rounded-full shrink-0 text-muted/40">
                           {date.getDate()}
                         </div>
-                        <span className="text-[9px] font-mono text-muted/40 leading-tight">Bank holiday</span>
+                        <span className="text-[10px] font-mono text-muted/40 leading-tight">Bank holiday</span>
                       </div>
                     );
                     return (
                       <div key={di}
-                        className={`min-h-[90px] border-r border-border/20 last:border-r-0 p-1.5 flex flex-col ${cellBg} ${isToday ? "ring-inset ring-2 ring-accent/50" : ""}`}>
+                        className={`min-h-[112px] border-r border-border/20 last:border-r-0 p-1.5 flex flex-col ${cellBg} ${isToday ? "ring-inset ring-2 ring-accent/50" : ""}`}>
                         <div onClick={() => onDateClick(key)}
-                          className={`text-xs font-mono mb-1 w-5 h-5 flex items-center justify-center rounded-full shrink-0 transition-colors cursor-pointer hover:bg-accent hover:text-white ${isToday ? "bg-accent text-white text-[10px] font-bold" : "text-muted"}`}>
+                          className={`text-sm font-mono mb-1 w-6 h-6 flex items-center justify-center rounded-full shrink-0 transition-colors cursor-pointer hover:bg-accent hover:text-white ${isToday ? "bg-accent text-white text-xs font-bold" : "text-muted"}`}>
                           {date.getDate()}
                         </div>
-                        <div className="flex-1 space-y-0.5 min-w-0">
+                        <div className="flex-1 space-y-1 min-w-0">
                           {dayEntries.map(entry => (
                             <div key={entry.id}
-                              className="text-[10px] font-mono rounded px-1.5 py-1 leading-tight bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 shadow-sm flex items-center justify-between gap-1 group/entry">
+                              className="text-xs font-mono rounded px-2 py-1.5 leading-tight bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 shadow-sm flex items-center justify-between gap-1 group/entry">
                               <span onClick={(e) => { e.stopPropagation(); onEdit(entry); }} className="truncate cursor-pointer hover:text-accent transition-colors min-w-0">
                                 <span className="text-gray-900 dark:text-gray-100">{entry.client}</span>
                                 <span className="text-gray-600 dark:text-gray-400 ml-1">{entry.hours}h</span>
@@ -139,7 +139,7 @@ export default function EntriesSection({
                           ))}
                         </div>
                         {target > 0 && !isFuture && (
-                          <div className={`text-[10px] font-mono font-bold text-right mt-0.5 shrink-0 ${onTarget ? "text-emerald-700 dark:text-emerald-300" : "text-red-600 dark:text-red-300"}`}>
+                          <div className={`text-xs font-mono font-bold text-right mt-0.5 shrink-0 ${onTarget ? "text-emerald-700 dark:text-emerald-300" : "text-red-600 dark:text-red-300"}`}>
                             {dayTotal > 0 ? `${dayTotal}h` : <span className="font-normal opacity-50">—</span>}
                           </div>
                         )}
