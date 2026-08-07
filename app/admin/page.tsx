@@ -410,7 +410,7 @@ export default function AdminPage() {
     <div className="min-h-screen">
       <div className="sticky top-0 z-20">
         <header className="border-b border-border bg-card/80 backdrop-blur-sm">
-          <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <img src="/JYM-Logo.jpg" alt="JYM Partnership" className="h-8 w-auto object-contain"/>
               <span className="font-display font-semibold text-sm text-ink hidden sm:block">Timesheet</span>
@@ -421,7 +421,7 @@ export default function AdminPage() {
         </header>
         {/* Tab bar */}
         <div className="border-b border-border bg-card/70 backdrop-blur-sm">
-          <div className="max-w-4xl mx-auto px-4 flex gap-1 overflow-x-auto">
+          <div className="max-w-7xl mx-auto px-4 flex gap-1 overflow-x-auto">
             {TABS.map(t => (
               <button key={t.id} onClick={() => selectTab(t.id)}
                 className={`text-xs font-mono px-4 py-2 my-2 rounded-lg whitespace-nowrap transition-colors ${activeTab === t.id ? "bg-ink text-paper font-semibold" : "text-muted hover:text-ink hover:bg-border/40"}`}>
@@ -432,7 +432,7 @@ export default function AdminPage() {
         </div>
       </div>
 
-      <main className="max-w-4xl mx-auto px-6 py-10">
+      <main className="max-w-7xl mx-auto px-6 py-10">
 
         {success && (
           <div className="animate-fade-in fixed top-6 right-6 z-50 bg-ink text-paper text-sm font-mono px-4 py-2.5 rounded-xl shadow-xl">✓ {success}</div>
