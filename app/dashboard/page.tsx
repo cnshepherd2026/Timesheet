@@ -182,7 +182,7 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen">
       <header className="border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img src="/JYM-Logo.jpg" alt="JYM Partnership" className="h-8 w-auto object-contain"/>
             <span className="font-display font-semibold text-sm text-ink hidden sm:block">Timesheet</span>
@@ -196,7 +196,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-6 py-10">
+      <main className="max-w-7xl mx-auto px-6 py-10">
         {/* Title + dark mode */}
         <div className="flex items-start justify-between animate-fade-up mb-8">
           <div>
