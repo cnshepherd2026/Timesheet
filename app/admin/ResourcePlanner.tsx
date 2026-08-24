@@ -61,7 +61,7 @@ export default function ResourcePlanner({ mode = "admin", selfUserId, selfName }
 
   const [view, setView] = useState<View>("board");
   const [weekStart, setWeekStart] = useState(0);   // week index of the first shown week
-  const [weeksShown, setWeeksShown] = useState(1); // 1, 2 or 4
+  const [weeksShown, setWeeksShown] = useState(isSelf ? 2 : 1); // 1, 2 or 4
   const [projects, setProjects] = useState<PlannerProject[]>([]);
   const [entries, setEntries] = useState<PlannerEntry[]>([]);
   const [planners, setPlanners] = useState<Planner[]>([]);
@@ -71,7 +71,7 @@ export default function ResourcePlanner({ mode = "admin", selfUserId, selfName }
   const [toast, setToast] = useState("");
 
   const [editing, setEditing] = useState<{ userId: string; date: string } | null>(null);
-  const [newProjectId, setNewProjectId] = useState("");
+  const [search, setSearch] = useState("");
   const [newPortion, setNewPortion] = useState<"full" | "half" | "custom">("full");
   const [newHours, setNewHours] = useState<number>(8);
 
@@ -133,24 +133,23 @@ export default function ResourcePlanner({ mode = "admin", selfUserId, selfName }
 
   function openCell(userId: string, date: Date) {
     setEditing({ userId, date: localDateKey(date) });
-    setNewProjectId("");
+    setSearch("");
     setNewPortion("full");
     setNewHours(targetHours(date) || 8);
   }
 
-  async function addAssignment() {
-    if (!editing || !newProjectId) return;
+  async function quickAdd(projectId: string) {
+    if (!editing) return;
     const date = new Date(editing.date + "T12:00:00");
     let hours = newHours;
     if (newPortion === "full") hours = targetHours(date) || 8;
     else if (newPortion === "half") hours = (targetHours(date) || 8) / 2;
     await supabase.from("planner_entries").insert({
-      user_id: editing.userId, date: editing.date, project_id: newProjectId,
+      user_id: editing.userId, date: editing.date, project_id: projectId,
       portion: newPortion, hours, created_by: me,
     });
-    setNewProjectId("");
     await loadWeek();
-    flash("Assigned");
+    flash("Added");
   }
 
   async function removeEntry(id: string) {
@@ -260,10 +259,61 @@ export default function ResourcePlanner({ mode = "admin", selfUserId, selfName }
             <div className="bg-card border border-border rounded-2xl p-10 text-center">
               <p className="text-sm text-muted">No planners selected yet. Go to <button onClick={() => setView("people")} className="text-accent underline">Planners</button> to choose who appears here.</p>
             </div>
+          ) : isSelf ? (
+            <div className="bg-card border border-border rounded-2xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full table-fixed border-collapse" style={{ minWidth: "640px" }}>
+                  <thead>
+                    <tr className="border-b border-border bg-paper/50">
+                      <th className="text-left px-3 py-2 w-[84px]"><span className="text-xs text-muted">Week</span></th>
+                      {["Mon", "Tue", "Wed", "Thu", "Fri"].map(wd => (
+                        <th key={wd} className="text-left px-3 py-2"><span className="text-sm font-medium text-ink">{wd}</span></th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {weekBlocks.map((block, bi) => (
+                      <tr key={bi} className="border-b border-border/50 align-top">
+                        <td className="px-3 py-2 text-[11px] text-muted whitespace-nowrap">{block[0].toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</td>
+                        {block.map(d => {
+                          const key = localDateKey(d);
+                          const isToday = key === todayKey;
+                          const bh = isBankHoliday(d);
+                          const ce = cellEntries(selfUserId!, key);
+                          return (
+                            <td key={key} className={`px-2 py-2 align-top ${bh ? "bg-paper/40" : ""}`}>
+                              <div className={`text-[11px] mb-1 ${isToday ? "text-accent font-medium" : "text-muted"}`}>{d.toLocaleDateString("en-GB", { weekday: "short" })} {d.getDate()}</div>
+                              {bh ? (
+                                <div className="text-[11px] text-muted bg-border/40 rounded-md px-2 py-1">Bank hol.</div>
+                              ) : (
+                                <button onClick={() => openCell(selfUserId!, d)} className="w-full text-left group">
+                                  {ce.length === 0 ? (
+                                    <div className="text-[11px] text-muted/60 border border-dashed border-border rounded-md px-2 py-1.5 group-hover:border-accent group-hover:text-accent transition-colors">+ Add</div>
+                                  ) : (
+                                    <div className="space-y-1">
+                                      {ce.map(e => (
+                                        <div key={e.id} className={`rounded-md px-2 py-1 text-[11px] ${chipClasses(e.project_id)}`}>
+                                          <div className="truncate leading-tight">{projName2(e.project_id)}</div>
+                                          <div className="text-[9px] opacity-70">{e.portion === "full" ? "Full" : e.portion === "half" ? "Half" : `${e.hours}h`}</div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </button>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           ) : (
             <div className="bg-card border border-border rounded-2xl overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse" style={{ minWidth: `${140 + planners.length * 200}px` }}>
+                <table className="w-full table-fixed border-collapse" style={{ minWidth: `${120 + planners.length * 160}px` }}>
                   <thead>
                     <tr className="border-b border-border bg-paper/50">
                       <th className="text-left px-4 py-3 w-[120px]"><span className="text-xs text-muted tracking-wide">Day</span></th>
@@ -464,36 +514,40 @@ export default function ResourcePlanner({ mode = "admin", selfUserId, selfName }
               )}
 
               <div className="border-t border-border pt-4 space-y-3">
-                <select value={newProjectId} onChange={e => setNewProjectId(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border border-border bg-paper text-ink text-sm focus:outline-none focus:border-ink">
-                  <option value="">Choose a project…</option>
-                  {absenceItems.length > 0 && (
-                    <optgroup label="Leave &amp; absence">
-                      {absenceItems.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    </optgroup>
-                  )}
-                  {statusGroups.filter(g => g.status !== "archived").map(g => (
-                    <optgroup key={g.status} label={STATUS_LABEL[g.status]}>
-                      {g.items.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    </optgroup>
-                  ))}
-                </select>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   {(["full", "half", "custom"] as const).map(pt => (
                     <button key={pt} onClick={() => setNewPortion(pt)}
-                      className={`text-xs px-3 py-2 rounded-lg border transition-colors ${newPortion === pt ? "bg-ink text-paper border-ink" : "border-border text-muted hover:text-ink"}`}>
-                      {pt === "full" ? "Full day" : pt === "half" ? "Half day" : "Hours"}
+                      className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${newPortion === pt ? "bg-ink text-paper border-ink" : "border-border text-muted hover:text-ink"}`}>
+                      {pt === "full" ? "Full day" : pt === "half" ? "Half day" : "Custom"}
                     </button>
                   ))}
                   {newPortion === "custom" && (
                     <input type="number" min={0} max={24} step={0.5} value={newHours} onChange={e => setNewHours(Number(e.target.value))}
-                      className="w-20 px-3 py-2 rounded-lg border border-border bg-paper text-ink text-sm focus:outline-none focus:border-ink"/>
+                      className="w-16 px-2 py-1 rounded-lg border border-border bg-paper text-ink text-sm focus:outline-none focus:border-ink"/>
                   )}
+                  <span className="text-[11px] text-muted ml-auto">Tap a project to add it</span>
                 </div>
-                <button onClick={addAssignment} disabled={!newProjectId}
-                  className="w-full py-3 bg-accent text-white font-medium text-sm rounded-xl hover:bg-accent/90 transition-all disabled:opacity-40">
-                  Add to day
-                </button>
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search projects…"
+                  className="w-full px-3 py-2 rounded-xl border border-border bg-paper text-ink text-sm focus:outline-none focus:border-ink"/>
+                <div className="max-h-64 overflow-y-auto space-y-3">
+                  {[...(absenceItems.length ? [{ label: "Leave & absence", items: absenceItems }] : []),
+                    ...statusGroups.filter(g => g.status !== "archived").map(g => ({ label: STATUS_LABEL[g.status], items: g.items }))]
+                    .map(grp => {
+                      const items = grp.items.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+                      if (items.length === 0) return null;
+                      return (
+                        <div key={grp.label}>
+                          <div className="text-[10px] uppercase tracking-wide text-muted mb-1">{grp.label}</div>
+                          <div className="space-y-1">
+                            {items.map(p => (
+                              <button key={p.id} onClick={() => quickAdd(p.id)}
+                                className="w-full text-left text-sm px-3 py-2 rounded-lg border border-border hover:border-accent hover:bg-accent/5 transition-colors">{p.name}</button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
               </div>
             </div>
           </div>
