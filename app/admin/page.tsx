@@ -2,16 +2,18 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
+import ResourcePlanner from "./ResourcePlanner";
 
 const SUPER_ADMIN = "chris.shepherd@jympartnership.co.uk";
 
 type Client = { id: string; name: string; sort_order: number };
 type Entry = { id: string; date: string; client: string; hours: number; user_id: string; user_email: string };
 type Profile = { id: string; display_name: string | null; email: string; is_admin: boolean; created_at?: string };
-type TabId = "overview" | "report" | "search" | "people" | "activities";
+type TabId = "overview" | "planner" | "report" | "search" | "people" | "activities";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "overview", label: "Overview" },
+  { id: "planner", label: "Resource Planner" },
   { id: "report", label: "Time Report" },
   { id: "search", label: "Client Search" },
   { id: "people", label: "People" },
@@ -82,7 +84,7 @@ export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<TabId>(() => {
     try {
       const saved = typeof window !== "undefined" ? localStorage.getItem("jym-admin-tab") : null;
-      if (saved && ["overview", "report", "search", "people", "activities"].includes(saved)) return saved as TabId;
+      if (saved && ["overview", "planner", "report", "search", "people", "activities"].includes(saved)) return saved as TabId;
     } catch {}
     return "overview";
   });
@@ -437,6 +439,9 @@ export default function AdminPage() {
         {success && (
           <div className="animate-fade-in fixed top-6 right-6 z-50 bg-ink text-paper text-sm font-mono px-4 py-2.5 rounded-xl shadow-xl">✓ {success}</div>
         )}
+
+        {/* ── RESOURCE PLANNER ── */}
+        {activeTab === "planner" && <ResourcePlanner />}
 
         {/* ── OVERVIEW (USER SUMMARY) ── */}
         {activeTab === "overview" && (
