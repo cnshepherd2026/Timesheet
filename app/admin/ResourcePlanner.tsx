@@ -181,9 +181,27 @@ export default function ResourcePlanner({ mode = "admin", selfUserId, selfName }
     await loadStatic();
     flash(!current ? "Added to planner" : "Removed from planner");
   }
+  async function renameProject(id: string, name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    await supabase.from("planner_projects").update({ name: trimmed }).eq("id", id);
+    await loadStatic();
+    flash("Renamed");
+  }
+  async function moveProject(list: PlannerProject[], index: number, dir: -1 | 1) {
+    const t = index + dir;
+    if (t < 0 || t >= list.length) return;
+    const a = list[index], b = list[t];
+    await Promise.all([
+      supabase.from("planner_projects").update({ sort_order: b.sort_order }).eq("id", a.id),
+      supabase.from("planner_projects").update({ sort_order: a.sort_order }).eq("id", b.id),
+    ]);
+    await loadStatic();
+  }
 
-  const grouped = STATUS_ORDER
-    .map(s => ({ status: s, items: projects.filter(p => p.status === s) }))
+  const absenceItems = projects.filter(p => p.kind === "absence").sort((a, b) => a.sort_order - b.sort_order);
+  const statusGroups = STATUS_ORDER
+    .map(s => ({ status: s, items: projects.filter(p => p.kind !== "absence" && p.status === s).sort((a, b) => a.sort_order - b.sort_order) }))
     .filter(g => g.items.length > 0);
 
   const todayKey = localDateKey(new Date());
@@ -345,13 +363,39 @@ export default function ResourcePlanner({ mode = "admin", selfUserId, selfName }
             <p className="text-xs text-muted mt-3">This list is separate from the timesheet clients — keep it as project-specific as you like.</p>
           </div>
 
-          {grouped.map(g => (
+          {/* Leave & absence — kept in a separate list at the top */}
+          {absenceItems.length > 0 && (
+            <div>
+              <h3 className="text-xs font-medium tracking-wide text-muted mb-3">Leave &amp; absence ({absenceItems.length})</h3>
+              <div className="bg-card border border-border rounded-2xl overflow-hidden">
+                {absenceItems.map((p, i) => (
+                  <div key={p.id} className={`flex items-center gap-2 px-4 py-2.5 ${i < absenceItems.length - 1 ? "border-b border-border/50" : ""}`}>
+                    <div className="flex flex-col mr-1 leading-none">
+                      <button onClick={() => moveProject(absenceItems, i, -1)} disabled={i === 0} className="text-[10px] text-muted hover:text-ink disabled:opacity-30">▲</button>
+                      <button onClick={() => moveProject(absenceItems, i, 1)} disabled={i === absenceItems.length - 1} className="text-[10px] text-muted hover:text-ink disabled:opacity-30">▼</button>
+                    </div>
+                    <input defaultValue={p.name} onBlur={e => { if (e.target.value.trim() !== p.name) renameProject(p.id, e.target.value); }}
+                      className="flex-1 text-sm text-ink bg-transparent border border-transparent hover:border-border focus:border-ink rounded-lg px-2 py-1 focus:outline-none transition-colors"/>
+                    <button onClick={() => removeProject(p.id)} className="text-xs text-muted hover:text-accent transition-colors">Remove</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Projects grouped by status — rename inline, reorder with the arrows */}
+          {statusGroups.map(g => (
             <div key={g.status}>
               <h3 className="text-xs font-medium tracking-wide text-muted mb-3">{STATUS_LABEL[g.status]} ({g.items.length})</h3>
               <div className="bg-card border border-border rounded-2xl overflow-hidden">
                 {g.items.map((p, i) => (
-                  <div key={p.id} className={`flex items-center gap-3 px-5 py-3 ${i < g.items.length - 1 ? "border-b border-border/50" : ""}`}>
-                    <span className="flex-1 text-sm text-ink">{p.name}{p.kind === "absence" && <span className="ml-2 text-[10px] text-muted">leave / absence</span>}</span>
+                  <div key={p.id} className={`flex items-center gap-2 px-4 py-2.5 ${i < g.items.length - 1 ? "border-b border-border/50" : ""}`}>
+                    <div className="flex flex-col mr-1 leading-none">
+                      <button onClick={() => moveProject(g.items, i, -1)} disabled={i === 0} className="text-[10px] text-muted hover:text-ink disabled:opacity-30">▲</button>
+                      <button onClick={() => moveProject(g.items, i, 1)} disabled={i === g.items.length - 1} className="text-[10px] text-muted hover:text-ink disabled:opacity-30">▼</button>
+                    </div>
+                    <input defaultValue={p.name} onBlur={e => { if (e.target.value.trim() !== p.name) renameProject(p.id, e.target.value); }}
+                      className="flex-1 text-sm text-ink bg-transparent border border-transparent hover:border-border focus:border-ink rounded-lg px-2 py-1 focus:outline-none transition-colors"/>
                     <select value={p.status} onChange={e => setProjectStatus(p.id, e.target.value)}
                       className="text-[11px] px-2 py-1 rounded-lg border border-border bg-paper text-muted focus:outline-none focus:border-ink">
                       <option value="live">Live</option>
@@ -423,7 +467,12 @@ export default function ResourcePlanner({ mode = "admin", selfUserId, selfName }
                 <select value={newProjectId} onChange={e => setNewProjectId(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-xl border border-border bg-paper text-ink text-sm focus:outline-none focus:border-ink">
                   <option value="">Choose a project…</option>
-                  {grouped.filter(g => g.status !== "archived").map(g => (
+                  {absenceItems.length > 0 && (
+                    <optgroup label="Leave &amp; absence">
+                      {absenceItems.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </optgroup>
+                  )}
+                  {statusGroups.filter(g => g.status !== "archived").map(g => (
                     <optgroup key={g.status} label={STATUS_LABEL[g.status]}>
                       {g.items.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </optgroup>
