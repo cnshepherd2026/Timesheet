@@ -72,6 +72,9 @@ export default function ResourcePlanner({ mode = "admin", selfUserId, selfName }
 
   const [editing, setEditing] = useState<{ userId: string; date: string } | null>(null);
   const [search, setSearch] = useState("");
+  const [recentIds, setRecentIds] = useState<string[]>(() => {
+    try { const s = typeof window !== "undefined" ? localStorage.getItem("jym-planner-recent") : null; return s ? JSON.parse(s) : []; } catch { return []; }
+  });
   const [newPortion, setNewPortion] = useState<"full" | "half" | "custom">("full");
   const [newHours, setNewHours] = useState<number>(8);
 
@@ -148,12 +151,25 @@ export default function ResourcePlanner({ mode = "admin", selfUserId, selfName }
       user_id: editing.userId, date: editing.date, project_id: projectId,
       portion: newPortion, hours, created_by: me,
     });
+    setRecentIds(prev => {
+      const next = [projectId, ...prev.filter(x => x !== projectId)].slice(0, 5);
+      try { localStorage.setItem("jym-planner-recent", JSON.stringify(next)); } catch {}
+      return next;
+    });
     await loadWeek();
     flash("Added");
   }
 
   async function removeEntry(id: string) {
     await supabase.from("planner_entries").delete().eq("id", id);
+    await loadWeek();
+  }
+
+  async function setEntryPortion(entry: PlannerEntry, portion: "full" | "half") {
+    const date = new Date(entry.date + "T12:00:00");
+    const base = targetHours(date) || 8;
+    const hours = portion === "full" ? base : base / 2;
+    await supabase.from("planner_entries").update({ portion, hours }).eq("id", entry.id);
     await loadWeek();
   }
 
@@ -289,20 +305,23 @@ export default function ResourcePlanner({ mode = "admin", selfUserId, selfName }
                               {bh ? (
                                 <div className="text-[11px] text-muted rounded-md px-2 py-1">Bank hol.</div>
                               ) : (
-                                <button onClick={() => openCell(selfUserId!, d)} className="w-full text-left group">
+                                <div onClick={() => openCell(selfUserId!, d)} className="w-full cursor-pointer group">
                                   {ce.length === 0 ? (
                                     <div className="text-[11px] text-muted/60 border border-dashed border-border rounded-md px-2 py-1.5 group-hover:border-accent group-hover:text-accent transition-colors">+ Add</div>
                                   ) : (
                                     <div className="space-y-1">
                                       {ce.map(e => (
                                         <div key={e.id} className={`rounded-md px-2 py-1 text-[11px] ${chipClasses(e.project_id)}`}>
-                                          <div className="truncate leading-tight">{projName2(e.project_id)}</div>
+                                          <div className="flex items-start justify-between gap-1">
+                                            <div className="truncate leading-tight">{projName2(e.project_id)}</div>
+                                            <span onClick={ev => { ev.stopPropagation(); removeEntry(e.id); }} title="Remove" className="opacity-50 hover:opacity-100 cursor-pointer shrink-0">✕</span>
+                                          </div>
                                           <div className="text-[9px] opacity-70">{e.portion === "full" ? "Full" : e.portion === "half" ? "Half" : `${e.hours}h`}</div>
                                         </div>
                                       ))}
                                     </div>
                                   )}
-                                </button>
+                                </div>
                               )}
                             </td>
                           );
@@ -368,20 +387,23 @@ export default function ResourcePlanner({ mode = "admin", selfUserId, selfName }
                                 const full = tgt > 0 && planned >= tgt;
                                 return (
                                   <td key={p.id} className={`px-3 py-2 ${full ? "bg-emerald-50" : ""}`}>
-                                    <button onClick={() => openCell(p.id, d)} className="w-full text-left group">
+                                    <div onClick={() => openCell(p.id, d)} className="w-full cursor-pointer group">
                                       {ce.length === 0 ? (
                                         <div className="text-[12px] text-muted/60 border border-dashed border-border rounded-lg px-3 py-2 group-hover:border-accent group-hover:text-accent transition-colors">+ Add</div>
                                       ) : (
                                         <div className="space-y-1">
                                           {ce.map(e => (
-                                            <div key={e.id} className={`rounded-lg px-2.5 py-1.5 text-[12px] flex items-center justify-between ${chipClasses(e.project_id)}`}>
+                                            <div key={e.id} className={`rounded-lg px-2.5 py-1.5 text-[12px] flex items-center justify-between gap-1 ${chipClasses(e.project_id)}`}>
                                               <span className="truncate">{projName2(e.project_id)}</span>
-                                              <span className="text-[10px] opacity-70 ml-2 shrink-0">{e.portion === "full" ? "Full" : e.portion === "half" ? "Half" : `${e.hours}h`}</span>
+                                              <span className="flex items-center gap-1.5 ml-1 shrink-0">
+                                                <span className="text-[10px] opacity-70">{e.portion === "full" ? "Full" : e.portion === "half" ? "Half" : `${e.hours}h`}</span>
+                                                <span onClick={ev => { ev.stopPropagation(); removeEntry(e.id); }} title="Remove" className="opacity-50 hover:opacity-100 cursor-pointer">✕</span>
+                                              </span>
                                             </div>
                                           ))}
                                         </div>
                                       )}
-                                    </button>
+                                    </div>
                                   </td>
                                 );
                               })}
@@ -500,6 +522,7 @@ export default function ResourcePlanner({ mode = "admin", selfUserId, selfName }
         const person = planners.find(p => p.id === editing.userId);
         const date = new Date(editing.date + "T12:00:00");
         const ce = cellEntries(editing.userId, editing.date);
+        const recentItems = recentIds.map(id => projects.find(p => p.id === id)).filter(Boolean) as PlannerProject[];
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-ink/20 backdrop-blur-sm" onClick={() => setEditing(null)}>
             <div className="bg-card border border-border rounded-2xl p-6 shadow-xl w-full max-w-md animate-fade-up" onClick={e => e.stopPropagation()}>
@@ -513,11 +536,13 @@ export default function ResourcePlanner({ mode = "admin", selfUserId, selfName }
 
               {ce.length > 0 && (
                 <div className="space-y-1.5 mb-4">
+                  <div className="text-[10px] uppercase tracking-wide text-muted">Planned this day — tap to change or remove</div>
                   {ce.map(e => (
-                    <div key={e.id} className={`rounded-lg px-3 py-2 text-sm flex items-center justify-between ${chipClasses(e.project_id)}`}>
-                      <span>{projName2(e.project_id)}</span>
-                      <div className="flex items-center gap-3">
-                        <span className="text-[11px] opacity-70">{e.portion === "full" ? "Full day" : e.portion === "half" ? "Half day" : `${e.hours}h`}</span>
+                    <div key={e.id} className={`rounded-lg px-3 py-2 text-sm flex items-center justify-between gap-2 ${chipClasses(e.project_id)}`}>
+                      <span className="truncate">{projName2(e.project_id)}</span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button onClick={() => setEntryPortion(e, "full")} className={`text-[10px] px-1.5 py-0.5 rounded ${e.portion === "full" ? "bg-ink text-paper" : "bg-white/70 hover:bg-white"}`}>Full</button>
+                        <button onClick={() => setEntryPortion(e, "half")} className={`text-[10px] px-1.5 py-0.5 rounded ${e.portion === "half" ? "bg-ink text-paper" : "bg-white/70 hover:bg-white"}`}>½ day</button>
                         <button onClick={() => removeEntry(e.id)} className="text-[11px] opacity-70 hover:opacity-100">Remove</button>
                       </div>
                     </div>
@@ -542,7 +567,8 @@ export default function ResourcePlanner({ mode = "admin", selfUserId, selfName }
                 <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search projects…"
                   className="w-full px-3 py-2 rounded-xl border border-border bg-paper text-ink text-sm focus:outline-none focus:border-ink"/>
                 <div className="max-h-64 overflow-y-auto space-y-3">
-                  {[...(absenceItems.length ? [{ label: "Leave & absence", items: absenceItems }] : []),
+                  {[...(recentItems.length ? [{ label: "Recently used", items: recentItems }] : []),
+                    ...(absenceItems.length ? [{ label: "Leave & absence", items: absenceItems }] : []),
                     ...statusGroups.filter(g => g.status !== "archived").map(g => ({ label: STATUS_LABEL[g.status], items: g.items }))]
                     .map(grp => {
                       const items = grp.items.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
