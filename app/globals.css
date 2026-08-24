@@ -2,22 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Light mode (default) */
+/* Light mode (default) — clean teal dashboard palette */
 :root {
-  --color-ink: #0D0D0D;
-  --color-paper: #F5F2EB;
-  --color-muted: #8C8680;
-  --color-border: #D9D4CC;
-  --color-card: #FDFAF5;
+  --color-ink: #1F2733;
+  --color-paper: #EEF0F4;
+  --color-muted: #6B7280;
+  --color-border: #E4E7EC;
+  --color-card: #FFFFFF;
 }
 
-/* Dark mode — cool slate, not brown */
+/* Dark mode — cool slate */
 .dark {
   --color-ink: #E8EAF0;
-  --color-paper: #1E2028;
-  --color-muted: #7A8099;
-  --color-border: #2E3248;
-  --color-card: #252836;
+  --color-paper: #161A22;
+  --color-muted: #8A93A6;
+  --color-border: #2A2F3C;
+  --color-card: #1F2530;
 }
 
 @layer base {
