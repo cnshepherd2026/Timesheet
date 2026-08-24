@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Fragment } from "react";
 import { createClient } from "@/lib/supabase";
 
 // ── Types ──
@@ -29,15 +29,15 @@ function targetHours(date: Date): number {
   if (day === 5) return 7;
   return 8;
 }
-function mondayOf(weekOffset: number): Date {
+function mondayOf(weekIndex: number): Date {
   const now = new Date();
   const monday = new Date(now);
-  monday.setDate(now.getDate() - ((now.getDay() + 6) % 7) + weekOffset * 7);
+  monday.setDate(now.getDate() - ((now.getDay() + 6) % 7) + weekIndex * 7);
   monday.setHours(0, 0, 0, 0);
   return monday;
 }
-function weekDays(weekOffset: number): Date[] {
-  const monday = mondayOf(weekOffset);
+function weekDays(weekIndex: number): Date[] {
+  const monday = mondayOf(weekIndex);
   return Array.from({ length: 5 }, (_, i) => {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
@@ -53,35 +53,50 @@ const STATUS_LABEL: Record<string, string> = {
 };
 const STATUS_ORDER = ["live", "to_plan_in", "probable", "archived"];
 
-export default function ResourcePlanner() {
+type Props = { mode?: "admin" | "self"; selfUserId?: string; selfName?: string | null };
+
+export default function ResourcePlanner({ mode = "admin", selfUserId, selfName }: Props) {
   const supabase = createClient();
+  const isSelf = mode === "self";
 
   const [view, setView] = useState<View>("board");
-  const [weekOffset, setWeekOffset] = useState(0);
+  const [weekStart, setWeekStart] = useState(0);   // week index of the first shown week
+  const [weeksShown, setWeeksShown] = useState(1); // 1, 2 or 4
   const [projects, setProjects] = useState<PlannerProject[]>([]);
   const [entries, setEntries] = useState<PlannerEntry[]>([]);
   const [planners, setPlanners] = useState<Planner[]>([]);
   const [allProfiles, setAllProfiles] = useState<Planner[]>([]);
   const [loading, setLoading] = useState(true);
-  const [me, setMe] = useState<string | null>(null);
+  const [me, setMe] = useState<string | null>(selfUserId || null);
   const [toast, setToast] = useState("");
 
-  // cell editor
   const [editing, setEditing] = useState<{ userId: string; date: string } | null>(null);
   const [newProjectId, setNewProjectId] = useState("");
   const [newPortion, setNewPortion] = useState<"full" | "half" | "custom">("full");
   const [newHours, setNewHours] = useState<number>(8);
 
-  // project add form
   const [projName, setProjName] = useState("");
   const [projStatus, setProjStatus] = useState("live");
 
-  const days = weekDays(weekOffset);
-  const weekLabel = `${days[0].toLocaleDateString("en-GB", { day: "numeric", month: "short" })} – ${days[4].toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
+  // All visible days across the shown weeks
+  const weekBlocks = Array.from({ length: weeksShown }, (_, i) => weekDays(weekStart + i));
+  const allDays = weekBlocks.flat();
+  const rangeLabel = `${allDays[0].toLocaleDateString("en-GB", { day: "numeric", month: "short" })} – ${allDays[allDays.length - 1].toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
 
   const flash = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
 
   const loadStatic = useCallback(async () => {
+    if (isSelf) {
+      const [{ data: proj }, { data: userRes }] = await Promise.all([
+        supabase.from("planner_projects").select("*").order("sort_order"),
+        supabase.auth.getUser(),
+      ]);
+      setProjects(proj || []);
+      setMe(selfUserId || userRes?.user?.id || null);
+      setPlanners([{ id: selfUserId!, display_name: selfName || "You", is_planner: true }]);
+      setLoading(false);
+      return;
+    }
     const [{ data: proj }, { data: profs }, { data: userRes }] = await Promise.all([
       supabase.from("planner_projects").select("*").order("sort_order"),
       supabase.from("profiles").select("id, display_name, is_planner"),
@@ -93,21 +108,28 @@ export default function ResourcePlanner() {
     setPlanners(profList.filter(p => p.is_planner).sort((a, b) => (a.display_name || "").localeCompare(b.display_name || "")));
     setMe(userRes?.user?.id || null);
     setLoading(false);
-  }, [supabase]);
+  }, [supabase, isSelf, selfUserId, selfName]);
 
   const loadWeek = useCallback(async () => {
-    const from = localDateKey(days[0]);
-    const to = localDateKey(days[4]);
-    const { data } = await supabase.from("planner_entries").select("*").gte("date", from).lte("date", to);
+    const from = localDateKey(allDays[0]);
+    const to = localDateKey(allDays[allDays.length - 1]);
+    let q = supabase.from("planner_entries").select("*").gte("date", from).lte("date", to);
+    if (isSelf && selfUserId) q = q.eq("user_id", selfUserId);
+    const { data } = await q;
     setEntries((data || []) as PlannerEntry[]);
-  }, [supabase, weekOffset]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [supabase, weekStart, weeksShown, isSelf, selfUserId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { loadStatic(); }, [loadStatic]);
   useEffect(() => { loadWeek(); }, [loadWeek]);
 
   const projectById = (id: string | null) => projects.find(p => p.id === id) || null;
-  const cellEntries = (userId: string, dateKey: string) =>
-    entries.filter(e => e.user_id === userId && e.date === dateKey);
+  const cellEntries = (userId: string, dateKey: string) => entries.filter(e => e.user_id === userId && e.date === dateKey);
+  const projName2 = (id: string | null) => projectById(id)?.name || "—";
+  const isAbsence = (id: string | null) => projectById(id)?.kind === "absence";
+  function chipClasses(id: string | null) {
+    if (isAbsence(id)) return "bg-border/50 text-muted";
+    return "bg-accent/10 text-accent border border-accent/20";
+  }
 
   function openCell(userId: string, date: Date) {
     setEditing({ userId, date: localDateKey(date) });
@@ -160,55 +182,59 @@ export default function ResourcePlanner() {
     flash(!current ? "Added to planner" : "Removed from planner");
   }
 
-  const projName2 = (id: string | null) => projectById(id)?.name || "—";
-  const isAbsence = (id: string | null) => projectById(id)?.kind === "absence";
-
-  function chipClasses(id: string | null) {
-    if (isAbsence(id)) return "bg-border/50 text-muted";
-    return "bg-accent/10 text-accent border border-accent/20";
-  }
-
   const grouped = STATUS_ORDER
     .map(s => ({ status: s, items: projects.filter(p => p.status === s) }))
     .filter(g => g.items.length > 0);
 
   const todayKey = localDateKey(new Date());
 
-  if (loading) return <div className="font-mono text-sm text-muted animate-pulse py-10">Loading planner…</div>;
+  if (loading) return <div className="text-sm text-muted animate-pulse py-8">Loading planner…</div>;
 
   return (
-    <section className="animate-fade-up space-y-6">
-      {toast && <div className="animate-fade-in fixed top-6 right-6 z-50 bg-accent text-white text-sm font-mono px-4 py-2.5 rounded-xl shadow-xl">✓ {toast}</div>}
+    <section className={isSelf ? "space-y-4" : "animate-fade-up space-y-6"}>
+      {toast && <div className="animate-fade-in fixed top-6 right-6 z-50 bg-accent text-white text-sm px-4 py-2.5 rounded-xl shadow-xl">✓ {toast}</div>}
 
-      <div className="flex items-end justify-between flex-wrap gap-4">
-        <div>
-          <p className="text-xs font-mono text-accent uppercase tracking-widest mb-1">Arch Techs</p>
-          <h1 className="font-display text-4xl font-bold text-ink">Resource Planner</h1>
-          <p className="text-sm text-muted mt-1">Plan the team&rsquo;s week, project by project.</p>
+      {!isSelf && (
+        <div className="flex items-end justify-between flex-wrap gap-4">
+          <div>
+            <p className="text-xs text-accent tracking-wide mb-1">Arch Techs</p>
+            <h1 className="font-display text-3xl font-medium text-ink">Resource planner</h1>
+            <p className="text-sm text-muted mt-1">Plan the team&rsquo;s week, project by project.</p>
+          </div>
+          <div className="flex rounded-lg border border-border overflow-hidden">
+            {(["board", "projects", "people"] as View[]).map(v => (
+              <button key={v} onClick={() => setView(v)}
+                className={`text-xs px-4 py-2 transition-colors ${view === v ? "bg-ink text-paper" : "bg-card text-muted hover:text-ink"}`}>
+                {v === "board" ? "Board" : v === "projects" ? "Projects" : "Planners"}
+              </button>
+            ))}
+          </div>
         </div>
-        {/* view switch */}
-        <div className="flex rounded-lg border border-border overflow-hidden">
-          {(["board", "projects", "people"] as View[]).map(v => (
-            <button key={v} onClick={() => setView(v)}
-              className={`text-xs font-mono px-4 py-2 transition-colors capitalize ${view === v ? "bg-ink text-paper" : "bg-card text-muted hover:text-ink"}`}>
-              {v === "board" ? "Board" : v === "projects" ? "Projects" : "Planners"}
-            </button>
-          ))}
-        </div>
-      </div>
+      )}
 
       {/* ── BOARD ── */}
-      {view === "board" && (
+      {(isSelf || view === "board") && (
         <>
           <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-ink/5 border border-border rounded-lg">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-muted shrink-0"><rect x="1" y="2" width="10" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M1 5h10M4 1v2M8 1v2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-              <span className="text-xs font-mono font-medium text-ink">{weekLabel}</span>
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-ink/5 border border-border rounded-lg">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-muted shrink-0"><rect x="1" y="2" width="10" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M1 5h10M4 1v2M8 1v2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                <span className="text-xs font-medium text-ink">{rangeLabel}</span>
+              </div>
+              {/* range toggle */}
+              <div className="flex rounded-lg border border-border overflow-hidden">
+                {[1, 2, 4].map(n => (
+                  <button key={n} onClick={() => setWeeksShown(n)}
+                    className={`text-xs px-3 py-1.5 transition-colors ${weeksShown === n ? "bg-ink text-paper" : "bg-card text-muted hover:text-ink"}`}>
+                    {n === 1 ? "1 week" : n === 4 ? "4 weeks" : "2 weeks"}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="flex items-center gap-1">
-              <button onClick={() => setWeekOffset(o => o - 1)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all text-sm">‹</button>
-              <button onClick={() => setWeekOffset(0)} className="text-xs font-mono px-3 py-1.5 rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all">This week</button>
-              <button onClick={() => setWeekOffset(o => o + 1)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all text-sm">›</button>
+              <button onClick={() => setWeekStart(o => o - weeksShown)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all text-sm">‹</button>
+              <button onClick={() => setWeekStart(0)} className="text-xs px-3 py-1.5 rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all">Today</button>
+              <button onClick={() => setWeekStart(o => o + weeksShown)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all text-sm">›</button>
             </div>
           </div>
 
@@ -222,17 +248,17 @@ export default function ResourcePlanner() {
                 <table className="w-full border-collapse" style={{ minWidth: `${140 + planners.length * 200}px` }}>
                   <thead>
                     <tr className="border-b border-border bg-paper/50">
-                      <th className="text-left px-4 py-3 w-[120px]"><span className="text-xs font-mono text-muted uppercase tracking-widest">Day</span></th>
+                      <th className="text-left px-4 py-3 w-[120px]"><span className="text-xs text-muted tracking-wide">Day</span></th>
                       {planners.map(p => {
-                        const total = days.reduce((s, d) => s + cellEntries(p.id, localDateKey(d)).reduce((a, e) => a + Number(e.hours), 0), 0);
+                        const total = allDays.reduce((s, d) => s + cellEntries(p.id, localDateKey(d)).reduce((a, e) => a + Number(e.hours), 0), 0);
                         return (
                           <th key={p.id} className="text-left px-4 py-3">
                             <div className="flex items-center gap-2">
                               <span className="w-6 h-6 rounded-full bg-accent/15 text-accent text-[11px] font-medium flex items-center justify-center">
                                 {(p.display_name || "?").split(" ").map(n => n[0]).slice(0, 2).join("")}
                               </span>
-                              <span className="text-sm font-display font-semibold text-ink">{p.display_name || "Unnamed"}</span>
-                              <span className="text-[10px] font-mono text-muted ml-auto">{total}h</span>
+                              <span className="text-sm font-medium text-ink">{p.display_name || "Unnamed"}</span>
+                              <span className="text-[10px] text-muted ml-auto">{total}h</span>
                             </div>
                           </th>
                         );
@@ -240,83 +266,94 @@ export default function ResourcePlanner() {
                     </tr>
                   </thead>
                   <tbody>
-                    {days.map(d => {
-                      const key = localDateKey(d);
-                      const isToday = key === todayKey;
-                      return (
-                        <tr key={key} className="border-b border-border/50 last:border-b-0 align-top">
-                          <td className="px-4 py-3">
-                            <div className={`text-sm font-medium ${isToday ? "text-accent" : "text-ink"}`}>{d.toLocaleDateString("en-GB", { weekday: "short" })} {d.getDate()}</div>
-                            <div className="text-[11px] font-mono text-muted">{d.toLocaleDateString("en-GB", { month: "short" })}</div>
-                          </td>
-                          {planners.map(p => {
-                            const ce = cellEntries(p.id, key);
-                            return (
-                              <td key={p.id} className="px-3 py-2">
-                                <button onClick={() => openCell(p.id, d)} className="w-full text-left group">
-                                  {ce.length === 0 ? (
-                                    <div className="text-[12px] text-muted/60 border border-dashed border-border rounded-lg px-3 py-2 group-hover:border-accent group-hover:text-accent transition-colors">+ Add</div>
-                                  ) : (
-                                    <div className="space-y-1">
-                                      {ce.map(e => (
-                                        <div key={e.id} className={`rounded-lg px-2.5 py-1.5 text-[12px] flex items-center justify-between ${chipClasses(e.project_id)}`}>
-                                          <span className="truncate">{projName2(e.project_id)}</span>
-                                          <span className="text-[10px] opacity-70 ml-2 shrink-0">{e.portion === "full" ? "Full" : e.portion === "half" ? "Half" : `${e.hours}h`}</span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </button>
+                    {weekBlocks.map((block, bi) => (
+                      <Fragment key={bi}>
+                        {weeksShown > 1 && (
+                          <tr className="bg-paper/40 border-b border-border">
+                            <td colSpan={planners.length + 1} className="px-4 py-1.5">
+                              <span className="text-[11px] text-muted">Week of {block[0].toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
+                            </td>
+                          </tr>
+                        )}
+                        {block.map(d => {
+                          const key = localDateKey(d);
+                          const isToday = key === todayKey;
+                          return (
+                            <tr key={key} className="border-b border-border/50 align-top">
+                              <td className="px-4 py-3">
+                                <div className={`text-sm font-medium ${isToday ? "text-accent" : "text-ink"}`}>{d.toLocaleDateString("en-GB", { weekday: "short" })} {d.getDate()}</div>
+                                <div className="text-[11px] text-muted">{d.toLocaleDateString("en-GB", { month: "short" })}</div>
                               </td>
-                            );
-                          })}
-                        </tr>
-                      );
-                    })}
+                              {planners.map(p => {
+                                const ce = cellEntries(p.id, key);
+                                return (
+                                  <td key={p.id} className="px-3 py-2">
+                                    <button onClick={() => openCell(p.id, d)} className="w-full text-left group">
+                                      {ce.length === 0 ? (
+                                        <div className="text-[12px] text-muted/60 border border-dashed border-border rounded-lg px-3 py-2 group-hover:border-accent group-hover:text-accent transition-colors">+ Add</div>
+                                      ) : (
+                                        <div className="space-y-1">
+                                          {ce.map(e => (
+                                            <div key={e.id} className={`rounded-lg px-2.5 py-1.5 text-[12px] flex items-center justify-between ${chipClasses(e.project_id)}`}>
+                                              <span className="truncate">{projName2(e.project_id)}</span>
+                                              <span className="text-[10px] opacity-70 ml-2 shrink-0">{e.portion === "full" ? "Full" : e.portion === "half" ? "Half" : `${e.hours}h`}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </button>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })}
+                      </Fragment>
+                    ))}
                   </tbody>
                 </table>
               </div>
             </div>
           )}
 
-          <p className="text-xs font-mono text-muted">Tip: click any day to assign work, half days, leave or training.</p>
+          <p className="text-xs text-muted">Tip: click any day to assign work, half days, leave or training.</p>
         </>
       )}
 
-      {/* ── PROJECTS ── */}
-      {view === "projects" && (
+      {/* ── PROJECTS (admin only) ── */}
+      {!isSelf && view === "projects" && (
         <div className="space-y-6">
           <div className="bg-card border border-border rounded-2xl p-7">
-            <h3 className="font-display text-xs font-bold uppercase tracking-widest text-muted mb-5">Add planner project</h3>
+            <h3 className="text-xs font-medium tracking-wide text-muted mb-5">Add planner project</h3>
             <form onSubmit={addProject} className="flex gap-3 flex-wrap">
               <input type="text" value={projName} onChange={e => setProjName(e.target.value)} placeholder="e.g. HMP Wetherby Anson Unit"
-                className="flex-1 min-w-[240px] px-4 py-3 rounded-xl border border-border bg-paper text-ink placeholder-muted/50 text-sm font-body focus:outline-none focus:border-ink transition-all"/>
+                className="flex-1 min-w-[240px] px-4 py-3 rounded-xl border border-border bg-paper text-ink placeholder-muted/50 text-sm focus:outline-none focus:border-ink transition-all"/>
               <select value={projStatus} onChange={e => setProjStatus(e.target.value)}
-                className="px-3 py-3 rounded-xl border border-border bg-paper text-ink text-sm font-mono focus:outline-none focus:border-ink">
+                className="px-3 py-3 rounded-xl border border-border bg-paper text-ink text-sm focus:outline-none focus:border-ink">
                 <option value="live">Live</option>
                 <option value="to_plan_in">Work to plan in</option>
                 <option value="probable">Probable</option>
               </select>
-              <button type="submit" className="px-6 py-3 bg-ink text-paper font-display font-semibold text-sm rounded-xl hover:bg-ink/90 transition-all">Add</button>
+              <button type="submit" className="px-6 py-3 bg-ink text-paper font-medium text-sm rounded-xl hover:bg-ink/90 transition-all">Add</button>
             </form>
-            <p className="text-xs font-mono text-muted mt-3">This list is separate from the timesheet clients — keep it as project-specific as you like.</p>
+            <p className="text-xs text-muted mt-3">This list is separate from the timesheet clients — keep it as project-specific as you like.</p>
           </div>
 
           {grouped.map(g => (
             <div key={g.status}>
-              <h3 className="font-display text-xs font-bold uppercase tracking-widest text-muted mb-3">{STATUS_LABEL[g.status]} ({g.items.length})</h3>
+              <h3 className="text-xs font-medium tracking-wide text-muted mb-3">{STATUS_LABEL[g.status]} ({g.items.length})</h3>
               <div className="bg-card border border-border rounded-2xl overflow-hidden">
                 {g.items.map((p, i) => (
                   <div key={p.id} className={`flex items-center gap-3 px-5 py-3 ${i < g.items.length - 1 ? "border-b border-border/50" : ""}`}>
-                    <span className="flex-1 font-body text-sm text-ink">{p.name}{p.kind === "absence" && <span className="ml-2 text-[10px] font-mono text-muted">leave / absence</span>}</span>
+                    <span className="flex-1 text-sm text-ink">{p.name}{p.kind === "absence" && <span className="ml-2 text-[10px] text-muted">leave / absence</span>}</span>
                     <select value={p.status} onChange={e => setProjectStatus(p.id, e.target.value)}
-                      className="text-[11px] font-mono px-2 py-1 rounded-lg border border-border bg-paper text-muted focus:outline-none focus:border-ink">
+                      className="text-[11px] px-2 py-1 rounded-lg border border-border bg-paper text-muted focus:outline-none focus:border-ink">
                       <option value="live">Live</option>
                       <option value="to_plan_in">To plan in</option>
                       <option value="probable">Probable</option>
                       <option value="archived">Archived</option>
                     </select>
-                    <button onClick={() => removeProject(p.id)} className="text-xs font-mono text-muted hover:text-accent transition-colors">Remove</button>
+                    <button onClick={() => removeProject(p.id)} className="text-xs text-muted hover:text-accent transition-colors">Remove</button>
                   </div>
                 ))}
               </div>
@@ -325,16 +362,16 @@ export default function ResourcePlanner() {
         </div>
       )}
 
-      {/* ── PLANNERS (people) ── */}
-      {view === "people" && (
+      {/* ── PLANNERS (admin only) ── */}
+      {!isSelf && view === "people" && (
         <div className="space-y-4">
           <div className="bg-card border border-border rounded-2xl p-6">
-            <h3 className="font-display text-xs font-bold uppercase tracking-widest text-muted mb-2">Who appears in the planner?</h3>
-            <p className="text-sm text-muted mb-5">Turn on the people whose time you forward-plan. Only they show as columns on the board.</p>
+            <h3 className="text-xs font-medium tracking-wide text-muted mb-2">Who appears in the planner?</h3>
+            <p className="text-sm text-muted mb-5">Turn on the people whose time you forward-plan. Only they show as columns, and they can plan their own week from their dashboard.</p>
             <div className="divide-y divide-border/60">
               {allProfiles.sort((a, b) => (a.display_name || "").localeCompare(b.display_name || "")).map(p => (
                 <div key={p.id} className="flex items-center justify-between py-3">
-                  <span className="text-sm font-body text-ink">{p.display_name || "(unnamed user)"}</span>
+                  <span className="text-sm text-ink">{p.display_name || "(unnamed user)"}</span>
                   <button onClick={() => togglePlanner(p.id, p.is_planner)}
                     className={`w-10 h-6 rounded-full transition-all relative ${p.is_planner ? "bg-accent" : "bg-border"}`}>
                     <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${p.is_planner ? "left-5" : "left-1"}`}/>
@@ -356,13 +393,12 @@ export default function ResourcePlanner() {
             <div className="bg-card border border-border rounded-2xl p-6 shadow-xl w-full max-w-md animate-fade-up" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h2 className="font-display text-lg font-bold text-ink">{person?.display_name || "Planner"}</h2>
-                  <p className="text-xs font-mono text-muted">{date.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}</p>
+                  <h2 className="font-display text-lg font-medium text-ink">{person?.display_name || "Planner"}</h2>
+                  <p className="text-xs text-muted">{date.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}</p>
                 </div>
                 <button onClick={() => setEditing(null)} className="text-muted hover:text-ink text-sm">✕</button>
               </div>
 
-              {/* existing */}
               {ce.length > 0 && (
                 <div className="space-y-1.5 mb-4">
                   {ce.map(e => (
@@ -377,10 +413,9 @@ export default function ResourcePlanner() {
                 </div>
               )}
 
-              {/* add */}
               <div className="border-t border-border pt-4 space-y-3">
                 <select value={newProjectId} onChange={e => setNewProjectId(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border border-border bg-paper text-ink text-sm font-body focus:outline-none focus:border-ink">
+                  className="w-full px-3 py-2.5 rounded-xl border border-border bg-paper text-ink text-sm focus:outline-none focus:border-ink">
                   <option value="">Choose a project…</option>
                   {grouped.filter(g => g.status !== "archived").map(g => (
                     <optgroup key={g.status} label={STATUS_LABEL[g.status]}>
@@ -391,17 +426,17 @@ export default function ResourcePlanner() {
                 <div className="flex items-center gap-2">
                   {(["full", "half", "custom"] as const).map(pt => (
                     <button key={pt} onClick={() => setNewPortion(pt)}
-                      className={`text-xs font-mono px-3 py-2 rounded-lg border transition-colors capitalize ${newPortion === pt ? "bg-ink text-paper border-ink" : "border-border text-muted hover:text-ink"}`}>
+                      className={`text-xs px-3 py-2 rounded-lg border transition-colors ${newPortion === pt ? "bg-ink text-paper border-ink" : "border-border text-muted hover:text-ink"}`}>
                       {pt === "full" ? "Full day" : pt === "half" ? "Half day" : "Hours"}
                     </button>
                   ))}
                   {newPortion === "custom" && (
                     <input type="number" min={0} max={24} step={0.5} value={newHours} onChange={e => setNewHours(Number(e.target.value))}
-                      className="w-20 px-3 py-2 rounded-lg border border-border bg-paper text-ink text-sm font-mono focus:outline-none focus:border-ink"/>
+                      className="w-20 px-3 py-2 rounded-lg border border-border bg-paper text-ink text-sm focus:outline-none focus:border-ink"/>
                   )}
                 </div>
                 <button onClick={addAssignment} disabled={!newProjectId}
-                  className="w-full py-3 bg-accent text-white font-display font-semibold text-sm rounded-xl hover:bg-accent/90 transition-all disabled:opacity-40">
+                  className="w-full py-3 bg-accent text-white font-medium text-sm rounded-xl hover:bg-accent/90 transition-all disabled:opacity-40">
                   Add to day
                 </button>
               </div>
