@@ -27,6 +27,7 @@ export default function Dashboard() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isPlanner, setIsPlanner] = useState(false);
   const [displayName, setDisplayName] = useState<string | null>(null);
+  const [dashTab, setDashTab] = useState<"timesheet" | "planner">("timesheet");
   const [entriesView, setEntriesView] = useState<"list" | "month">(() => {
     if (typeof window !== "undefined" && window.innerWidth < 640) return "list";
     return "month";
@@ -260,9 +261,21 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Your forward plan (planners only) */}
-        {isPlanner && user?.id && (
-          <div className="mb-8 bg-card border border-border rounded-2xl p-5 sm:p-6 animate-fade-up">
+        {/* Timesheet / Forward-planner tabs (planners only) */}
+        {isPlanner && (
+          <div className="flex rounded-lg border border-border overflow-hidden w-fit mb-6">
+            {(["timesheet", "planner"] as const).map(t => (
+              <button key={t} onClick={() => setDashTab(t)}
+                className={`text-sm px-5 py-2 transition-colors ${dashTab === t ? "bg-ink text-paper" : "bg-card text-muted hover:text-ink"}`}>
+                {t === "timesheet" ? "Timesheet" : "Forward planner"}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Forward planner tab */}
+        {isPlanner && dashTab === "planner" && user?.id && (
+          <div className="animate-fade-up">
             <div className="mb-4">
               <h2 className="font-display text-xl font-medium text-ink">Your forward plan</h2>
               <p className="text-sm text-muted mt-0.5">Plan the projects you&rsquo;ll be working on. This feeds into the team resource planner reviewed each week.</p>
@@ -271,7 +284,8 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Draggable sections */}
+        {/* Timesheet tab (default) */}
+        {(!isPlanner || dashTab === "timesheet") && (
         <div className="space-y-8">
           {sectionOrder.map((sectionId, idx) => {
             const dragProps = {
@@ -336,6 +350,7 @@ export default function Dashboard() {
             return null;
           })}
         </div>
+        )}
       </main>
     </div>
   );
