@@ -15,7 +15,7 @@ module.exports = {
       colors: {
         ink: "var(--color-ink)",
         paper: "var(--color-paper)",
-        accent: "#E8572A",
+        accent: "#1D9E75",
         muted: "var(--color-muted)",
         border: "var(--color-border)",
         card: "var(--color-card)",
