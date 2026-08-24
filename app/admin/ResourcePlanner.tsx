@@ -278,14 +278,20 @@ export default function ResourcePlanner({ mode = "admin", selfUserId, selfName }
                         {block.map(d => {
                           const key = localDateKey(d);
                           const isToday = key === todayKey;
+                          const bh = isBankHoliday(d);
                           return (
-                            <tr key={key} className="border-b border-border/50 align-top">
+                            <tr key={key} className={`border-b border-border/50 align-top ${bh ? "bg-paper/40" : ""}`}>
                               <td className="px-4 py-3">
                                 <div className={`text-sm font-medium ${isToday ? "text-accent" : "text-ink"}`}>{d.toLocaleDateString("en-GB", { weekday: "short" })} {d.getDate()}</div>
-                                <div className="text-[11px] text-muted">{d.toLocaleDateString("en-GB", { month: "short" })}</div>
+                                <div className="text-[11px] text-muted">{bh ? "Bank holiday" : d.toLocaleDateString("en-GB", { month: "short" })}</div>
                               </td>
                               {planners.map(p => {
                                 const ce = cellEntries(p.id, key);
+                                if (bh) return (
+                                  <td key={p.id} className="px-3 py-2">
+                                    <div className="text-[12px] text-muted bg-border/40 rounded-lg px-3 py-2">Bank holiday</div>
+                                  </td>
+                                );
                                 return (
                                   <td key={p.id} className="px-3 py-2">
                                     <button onClick={() => openCell(p.id, d)} className="w-full text-left group">
