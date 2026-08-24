@@ -300,8 +300,8 @@ export default function ResourcePlanner({ mode = "admin", selfUserId, selfName }
                           const tgt = targetHours(d);
                           const full = tgt > 0 && planned >= tgt;
                           return (
-                            <td key={key} className={`px-2 py-2 align-top ${bh ? "bg-border/25" : full ? "bg-emerald-50" : ""}`}>
-                              <div className={`text-[11px] mb-1 ${isToday ? "text-accent font-medium" : "text-muted"}`}>{d.toLocaleDateString("en-GB", { weekday: "short" })} {d.getDate()}</div>
+                            <td key={key} className={`px-2 py-2 align-top ${bh ? "bg-border/25" : ""}`} style={!bh && full ? { boxShadow: "inset 4px 0 0 0 #10B981" } : undefined}>
+                              <div className={`text-[11px] mb-1 ${isToday ? "text-accent font-medium" : full ? "text-emerald-700 font-medium" : "text-muted"}`}>{d.toLocaleDateString("en-GB", { weekday: "short" })} {d.getDate()}</div>
                               {bh ? (
                                 <div className="text-[11px] text-muted rounded-md px-2 py-1">Bank hol.</div>
                               ) : (
@@ -386,7 +386,7 @@ export default function ResourcePlanner({ mode = "admin", selfUserId, selfName }
                                 const tgt = targetHours(d);
                                 const full = tgt > 0 && planned >= tgt;
                                 return (
-                                  <td key={p.id} className={`px-3 py-2 ${full ? "bg-emerald-50" : ""}`}>
+                                  <td key={p.id} className="px-3 py-2" style={full ? { boxShadow: "inset 4px 0 0 0 #10B981" } : undefined}>
                                     <div onClick={() => openCell(p.id, d)} className="w-full cursor-pointer group">
                                       {ce.length === 0 ? (
                                         <div className="text-[12px] text-muted/60 border border-dashed border-border rounded-lg px-3 py-2 group-hover:border-accent group-hover:text-accent transition-colors">+ Add</div>
@@ -421,7 +421,7 @@ export default function ResourcePlanner({ mode = "admin", selfUserId, selfName }
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-muted mt-2">
             <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-accent/15 border border-accent/30 inline-block"/>Project work</span>
             <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-amber-50 border border-amber-200 inline-block"/>Leave / absence</span>
-            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-100 border border-emerald-200 inline-block"/>Full day planned</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-white inline-block" style={{ boxShadow: "inset 3px 0 0 0 #10B981", border: "1px solid #E4E7EC" }}/>Full day planned</span>
             <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-border/40 inline-block"/>Bank holiday</span>
           </div>
           <p className="text-xs text-muted mt-2">Tip: click any day to assign work, half days, leave or training.</p>
