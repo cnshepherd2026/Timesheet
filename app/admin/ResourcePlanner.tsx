@@ -172,6 +172,10 @@ export default function ResourcePlanner({ mode = "admin", selfUserId, selfName }
     await supabase.from("planner_entries").update({ portion, hours }).eq("id", entry.id);
     await loadWeek();
   }
+  async function setEntryHours(entry: PlannerEntry, hours: number) {
+    await supabase.from("planner_entries").update({ portion: "custom", hours }).eq("id", entry.id);
+    await loadWeek();
+  }
 
   async function addProject(e: React.FormEvent) {
     e.preventDefault();
@@ -542,7 +546,11 @@ export default function ResourcePlanner({ mode = "admin", selfUserId, selfName }
                       <span className="truncate">{projName2(e.project_id)}</span>
                       <div className="flex items-center gap-1.5 shrink-0">
                         <button onClick={() => setEntryPortion(e, "full")} className={`text-[10px] px-1.5 py-0.5 rounded ${e.portion === "full" ? "bg-ink text-paper" : "bg-white/70 hover:bg-white"}`}>Full</button>
-                        <button onClick={() => setEntryPortion(e, "half")} className={`text-[10px] px-1.5 py-0.5 rounded ${e.portion === "half" ? "bg-ink text-paper" : "bg-white/70 hover:bg-white"}`}>½ day</button>
+                        <button onClick={() => setEntryPortion(e, "half")} className={`text-[10px] px-1.5 py-0.5 rounded ${e.portion === "half" ? "bg-ink text-paper" : "bg-white/70 hover:bg-white"}`}>½</button>
+                        <input key={`${e.id}-${e.hours}`} type="number" min={0} max={24} step={0.5} defaultValue={e.hours}
+                          onBlur={ev => { const v = Number(ev.target.value); if (v > 0 && v !== Number(e.hours)) setEntryHours(e, v); }}
+                          className={`w-12 text-[10px] px-1.5 py-0.5 rounded text-ink focus:outline-none ${e.portion === "custom" ? "bg-ink/10 ring-1 ring-ink" : "bg-white/70 focus:bg-white"}`}
+                          title="Type custom hours, then click away"/>
                         <button onClick={() => removeEntry(e.id)} className="text-[11px] opacity-70 hover:opacity-100">Remove</button>
                       </div>
                     </div>
