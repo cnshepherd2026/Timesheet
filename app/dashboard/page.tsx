@@ -7,6 +7,7 @@ import LogHoursForm from "@/components/dashboard/LogHoursForm";
 import StatsBar from "@/components/dashboard/StatsBar";
 import ActivityBreakdown from "@/components/dashboard/ActivityBreakdown";
 import EntriesSection from "@/components/dashboard/EntriesSection";
+import ResourcePlanner from "@/app/admin/ResourcePlanner";
 
 const SUPER_ADMIN = "chris.shepherd@jympartnership.co.uk";
 
@@ -24,6 +25,9 @@ export default function Dashboard() {
   const [filterClient, setFilterClient] = useState("All");
   const [success, setSuccess] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isPlanner, setIsPlanner] = useState(false);
+  const [displayName, setDisplayName] = useState<string | null>(null);
+  const [dashTab, setDashTab] = useState<"timesheet" | "planner">("timesheet");
   const [entriesView, setEntriesView] = useState<"list" | "month">(() => {
     if (typeof window !== "undefined" && window.innerWidth < 640) return "list";
     return "month";
@@ -70,12 +74,10 @@ export default function Dashboard() {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) { router.push("/login"); return; }
       setUser({ email: session.user.email, id: session.user.id });
-      if (session.user.email === SUPER_ADMIN) {
-        setIsAdmin(true);
-      } else {
-        const { data: profile } = await supabase.from("profiles").select("is_admin").eq("id", session.user.id).single();
-        setIsAdmin(profile?.is_admin || false);
-      }
+      const { data: profile } = await supabase.from("profiles").select("is_admin, is_planner, display_name").eq("id", session.user.id).single();
+      setIsAdmin(session.user.email === SUPER_ADMIN || profile?.is_admin || false);
+      setIsPlanner(profile?.is_planner || false);
+      setDisplayName(profile?.display_name || null);
       fetchClients();
       fetchEntries(session.user.id).then(() => setLoading(false));
     });
@@ -259,7 +261,31 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Draggable sections */}
+        {/* Timesheet / Forward-planner tabs (planners only) */}
+        {isPlanner && (
+          <div className="flex rounded-lg border border-border overflow-hidden w-fit mb-6">
+            {(["timesheet", "planner"] as const).map(t => (
+              <button key={t} onClick={() => setDashTab(t)}
+                className={`text-sm px-5 py-2 transition-colors ${dashTab === t ? "bg-ink text-paper" : "bg-card text-muted hover:text-ink"}`}>
+                {t === "timesheet" ? "Timesheet" : "Forward planner"}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Forward planner tab */}
+        {isPlanner && dashTab === "planner" && user?.id && (
+          <div className="animate-fade-up">
+            <div className="mb-4">
+              <h2 className="font-display text-xl font-medium text-ink">Your forward plan</h2>
+              <p className="text-sm text-muted mt-0.5">Plan the projects you&rsquo;ll be working on. This feeds into the team resource planner reviewed each week.</p>
+            </div>
+            <ResourcePlanner mode="self" selfUserId={user.id} selfName={displayName || user.email || "You"} />
+          </div>
+        )}
+
+        {/* Timesheet tab (default) */}
+        {(!isPlanner || dashTab === "timesheet") && (
         <div className="space-y-8">
           {sectionOrder.map((sectionId, idx) => {
             const dragProps = {
@@ -324,6 +350,7 @@ export default function Dashboard() {
             return null;
           })}
         </div>
+        )}
       </main>
     </div>
   );
