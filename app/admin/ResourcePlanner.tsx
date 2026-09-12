@@ -1,6 +1,8 @@
 "use client";
 import { useState, useEffect, useCallback, Fragment } from "react";
 import { createClient } from "@/lib/supabase";
+import { NavArrow } from "@/components/MonthNav";
+import { localDateKey, isBankHoliday, targetHours } from "@/lib/dateUtils";
 
 // ── Types ──
 type PlannerProject = { id: string; name: string; kind: string; status: string; sort_order: number };
@@ -10,25 +12,6 @@ type Planner = { id: string; display_name: string | null; is_planner: boolean };
 type View = "board" | "projects" | "people";
 
 // ── Date helpers ──
-function localDateKey(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-const UK_BANK_HOLIDAYS = new Set([
-  "2025-01-01","2025-04-18","2025-04-21","2025-05-05","2025-05-26","2025-08-25","2025-12-25","2025-12-26",
-  "2026-01-01","2026-04-03","2026-04-06","2026-05-04","2026-05-25","2026-08-31","2026-12-25","2026-12-28",
-  "2027-01-01","2027-03-26","2027-03-29","2027-05-03","2027-05-31","2027-08-30","2027-12-27","2027-12-28",
-]);
-function isBankHoliday(date: Date): boolean { return UK_BANK_HOLIDAYS.has(localDateKey(date)); }
-function targetHours(date: Date): number {
-  const day = date.getDay();
-  if (day === 0 || day === 6) return 0;
-  if (isBankHoliday(date)) return 0;
-  if (day === 5) return 7;
-  return 8;
-}
 function mondayOf(weekIndex: number): Date {
   const now = new Date();
   const monday = new Date(now);
@@ -269,9 +252,9 @@ export default function ResourcePlanner({ mode = "admin", selfUserId, selfName }
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <button onClick={() => setWeekStart(o => o - weeksShown)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all text-sm">‹</button>
-              <button onClick={() => setWeekStart(0)} className="text-xs px-3 py-1.5 rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all">Today</button>
-              <button onClick={() => setWeekStart(o => o + weeksShown)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all text-sm">›</button>
+              <NavArrow dir="prev" label="Earlier weeks" onClick={() => setWeekStart(o => o - weeksShown)}/>
+              <button onClick={() => setWeekStart(0)} className="text-xs px-3 h-10 sm:h-9 rounded-lg border border-border hover:border-ink text-muted hover:text-ink transition-all">Today</button>
+              <NavArrow dir="next" label="Later weeks" onClick={() => setWeekStart(o => o + weeksShown)}/>
             </div>
           </div>
 
