@@ -1,5 +1,6 @@
 "use client";
 import { Entry, Client, localDateKey, todayKey, targetHours, getCalendarMonth, isBankHoliday } from "@/lib/dateUtils";
+import MonthNav from "@/components/MonthNav";
 
 type Props = {
   monthEntries: Entry[];
@@ -7,12 +8,11 @@ type Props = {
   clients: Client[];
   calMonth: { year: number; month: number };
   calMonthLabel: string;
-  monthLoading: boolean;
   entriesView: "list" | "month";
   filterClient: string;
   setEntriesView: (v: "list" | "month") => void;
   setFilterClient: (v: string) => void;
-  setCalMonth: (fn: (m: { year: number; month: number }) => { year: number; month: number }) => void;
+  setCalMonth: (m: { year: number; month: number }) => void;
   onEdit: (entry: Entry) => void;
   onDelete: (id: string) => void;
   onExportCSV: () => void;
@@ -20,7 +20,7 @@ type Props = {
 };
 
 export default function EntriesSection({
-  monthEntries, filtered, clients, calMonth, calMonthLabel, monthLoading,
+  monthEntries, filtered, clients, calMonth, calMonthLabel,
   entriesView, filterClient, setEntriesView, setFilterClient, setCalMonth,
   onEdit, onDelete, onExportCSV, onDateClick,
 }: Props) {
@@ -32,16 +32,9 @@ export default function EntriesSection({
     <div>
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <h2 className="font-display text-lg font-bold">Entries</h2>
-          <div className="flex items-center gap-1">
-            <button onClick={() => setCalMonth(m => { const d = new Date(m.year, m.month - 1, 1); return { year: d.getFullYear(), month: d.getMonth() }; })}
-              className="w-6 h-6 flex items-center justify-center rounded-md border border-border hover:border-ink text-muted hover:text-ink transition-all text-xs">‹</button>
-            <span className="text-sm font-mono text-muted px-1">{calMonthLabel}</span>
-            {monthLoading && <span className="text-xs font-mono text-muted animate-pulse">loading…</span>}
-            <button onClick={() => setCalMonth(m => { const d = new Date(m.year, m.month + 1, 1); return { year: d.getFullYear(), month: d.getMonth() }; })}
-              className="w-6 h-6 flex items-center justify-center rounded-md border border-border hover:border-ink text-muted hover:text-ink transition-all text-xs">›</button>
-          </div>
+          <MonthNav value={calMonth} onChange={setCalMonth}/>
         </div>
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <div className="flex rounded-lg border border-border overflow-hidden">
@@ -105,26 +98,26 @@ export default function EntriesSection({
                     else if (isFuture) cellBg = "";
                     else if (onTarget) cellBg = "bg-emerald-100 dark:bg-emerald-900/50";
                     else if (isPastOrToday && target > 0) cellBg = "bg-red-100 dark:bg-red-900/50";
+                    const cellTitle = `Log hours for ${date.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}`;
+                    const openDay = () => onDateClick(key);
+                    const keyOpen = (e: React.KeyboardEvent) => {
+                      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openDay(); }
+                    };
                     if (isWeekend) return (
-                      <div key={di} className={`border-r border-border/20 last:border-r-0 ${cellBg} flex flex-col items-center justify-start pt-1.5`}>
-                        <span className="text-[10px] font-mono text-muted/30">{date.getDate()}</span>
-                      </div>
-                    );
-                    if (isBH) return (
-                      <div key={di} className={`min-h-[112px] border-r border-border/20 last:border-r-0 p-1.5 flex flex-col ${cellBg}`}>
-                        <div className="text-sm font-mono mb-1 w-6 h-6 flex items-center justify-center rounded-full shrink-0 text-muted/40">
-                          {date.getDate()}
-                        </div>
-                        <span className="text-[10px] font-mono text-muted/40 leading-tight">Bank holiday</span>
+                      <div key={di} role="button" tabIndex={0} title={cellTitle} onClick={openDay} onKeyDown={keyOpen}
+                        className={`border-r border-border/20 last:border-r-0 ${cellBg} ${isToday ? "ring-inset ring-2 ring-accent/50" : ""} flex flex-col items-center justify-start pt-1.5 gap-0.5 cursor-pointer hover:bg-accent/10 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent`}>
+                        <span className={`text-[10px] font-mono ${isToday ? "text-accent font-bold" : "text-muted/40"}`}>{date.getDate()}</span>
+                        {dayTotal > 0 && <span className="text-[9px] font-mono font-bold text-accent">{dayTotal}</span>}
                       </div>
                     );
                     return (
-                      <div key={di}
-                        className={`min-h-[112px] border-r border-border/20 last:border-r-0 p-1.5 flex flex-col ${cellBg} ${isToday ? "ring-inset ring-2 ring-accent/50" : ""}`}>
-                        <div onClick={() => onDateClick(key)}
-                          className={`text-sm font-mono mb-1 w-6 h-6 flex items-center justify-center rounded-full shrink-0 transition-colors cursor-pointer hover:bg-accent hover:text-white ${isToday ? "bg-accent text-white text-xs font-bold" : "text-muted"}`}>
+                      <div key={di} role="button" tabIndex={0} title={cellTitle} onClick={openDay} onKeyDown={keyOpen}
+                        className={`min-h-[112px] border-r border-border/20 last:border-r-0 p-1.5 flex flex-col cursor-pointer transition-colors hover:bg-accent/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent ${cellBg} ${isToday ? "ring-inset ring-2 ring-accent/50" : ""}`}>
+                        <div
+                          className={`text-sm font-mono mb-1 w-6 h-6 flex items-center justify-center rounded-full shrink-0 ${isToday ? "bg-accent text-white text-xs font-bold" : isBH ? "text-muted/40" : "text-muted"}`}>
                           {date.getDate()}
                         </div>
+                        {isBH && <span className="text-[10px] font-mono text-muted/40 leading-tight mb-1">Bank holiday</span>}
                         <div className="flex-1 space-y-1 min-w-0">
                           {dayEntries.map(entry => (
                             <div key={entry.id}
@@ -138,11 +131,13 @@ export default function EntriesSection({
                             </div>
                           ))}
                         </div>
-                        {target > 0 && !isFuture && (
+                        {target > 0 && !isFuture ? (
                           <div className={`text-xs font-mono font-bold text-right mt-0.5 shrink-0 ${onTarget ? "text-emerald-700 dark:text-emerald-300" : "text-red-600 dark:text-red-300"}`}>
                             {dayTotal > 0 ? `${dayTotal}h` : <span className="font-normal opacity-50">—</span>}
                           </div>
-                        )}
+                        ) : dayTotal > 0 ? (
+                          <div className="text-xs font-mono font-bold text-right mt-0.5 shrink-0 text-muted">{dayTotal}h</div>
+                        ) : null}
                       </div>
                     );
                   })}
@@ -150,9 +145,10 @@ export default function EntriesSection({
               ))}
             </div>
           </div></div>
-          <div className="flex items-center gap-4 px-5 py-3 border-t border-border/50 bg-paper/30">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 border-t border-border/50 bg-paper/30">
             <span className="flex items-center gap-1.5 text-xs font-mono text-muted"><span className="w-3 h-3 rounded-sm bg-emerald-100 border border-emerald-200 inline-block"/>On target</span>
             <span className="flex items-center gap-1.5 text-xs font-mono text-muted"><span className="w-3 h-3 rounded-sm bg-red-100 border border-red-200 inline-block"/>Missing</span>
+            <span className="text-xs font-mono text-muted">Click any day to log hours</span>
             <span className="ml-auto text-xs font-mono text-muted">Mon–Thu 8h · Fri 7h</span>
           </div>
         </div>
