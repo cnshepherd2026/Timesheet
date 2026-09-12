@@ -1,8 +1,8 @@
 "use client";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
-import { localDateKey, todayKey, Entry, Client } from "@/lib/dateUtils";
+import { todayKey, Entry, Client } from "@/lib/dateUtils";
 import LogHoursForm from "@/components/dashboard/LogHoursForm";
 import StatsBar from "@/components/dashboard/StatsBar";
 import ActivityBreakdown from "@/components/dashboard/ActivityBreakdown";
@@ -19,7 +19,6 @@ export default function Dashboard() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
-  const [monthLoading, setMonthLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [filterClient, setFilterClient] = useState("All");
@@ -97,8 +96,10 @@ export default function Dashboard() {
 
   async function handleSignOut() { await supabase.auth.signOut(); router.push("/login"); }
 
+  // Keep whatever date the user is working on, so back-filling a run of days
+  // doesn't mean re-picking the date after every save.
   function resetForm() {
-    setForm({ date: todayKey(), client: clients[0]?.name || "", hours: "8" });
+    setForm(f => ({ date: f.date, client: clients[0]?.name || "", hours: "8" }));
     setEditId(null);
   }
 
@@ -113,8 +114,11 @@ export default function Dashboard() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
     const payload = { date: form.date, client: form.client, hours: parseFloat(form.hours), user_id: session.user.id, user_email: session.user.email };
-    if (editId) { await supabase.from("timesheet_entries").update(payload).eq("id", editId); setSuccess("Entry updated!"); }
-    else { await supabase.from("timesheet_entries").insert(payload); setSuccess("Hours logged!"); }
+    const onDate = form.date === todayKey()
+      ? ""
+      : ` — still on ${new Date(form.date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}`;
+    if (editId) { await supabase.from("timesheet_entries").update(payload).eq("id", editId); setSuccess(`Entry updated${onDate}`); }
+    else { await supabase.from("timesheet_entries").insert(payload); setSuccess(`Hours logged${onDate}`); }
     await fetchEntries(session.user.id);
     resetForm(); setSaving(false);
     setTimeout(() => setSuccess(""), 3000);
@@ -162,6 +166,26 @@ export default function Dashboard() {
     dragSectionItem.current = null;
     try { localStorage.setItem("jym-section-order", JSON.stringify(sectionOrder)); } catch {}
   }
+
+  // Each person's own most-used activities, worked out from what they've already
+  // logged in the last 90 days. Ranked by how often, then by most recent.
+  const topActivities = useMemo(() => {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 90);
+    const cutoffKey = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, "0")}-${String(cutoff.getDate()).padStart(2, "0")}`;
+    const live = new Set(clients.map(c => c.name));
+    const stats = new Map<string, { count: number; last: string }>();
+    entries.forEach(e => {
+      if (e.date < cutoffKey || !live.has(e.client)) return;
+      const s = stats.get(e.client);
+      if (s) { s.count += 1; if (e.date > s.last) s.last = e.date; }
+      else stats.set(e.client, { count: 1, last: e.date });
+    });
+    return Array.from(stats.entries())
+      .sort((a, b) => b[1].count - a[1].count || b[1].last.localeCompare(a[1].last))
+      .slice(0, 6)
+      .map(([name]) => name);
+  }, [entries, clients]);
 
   const calMonthPrefix = `${String(calMonth.year)}-${String(calMonth.month + 1).padStart(2, "0")}`;
   const monthEntries = entries.filter(e => e.date.startsWith(calMonthPrefix));
@@ -312,6 +336,7 @@ export default function Dashboard() {
                 {sectionHandle}
                 <LogHoursForm
                   form={form} setForm={setForm} clients={clients}
+                  topActivities={topActivities}
                   saving={saving} editId={editId} isAdmin={isAdmin}
                   onSubmit={handleSubmit} onCancel={resetForm}
                 />
@@ -338,7 +363,7 @@ export default function Dashboard() {
                 <EntriesSection
                   monthEntries={monthEntries} filtered={filtered} clients={clients}
                   calMonth={calMonth} calMonthLabel={calMonthLabel}
-                  monthLoading={monthLoading} entriesView={entriesView}
+                  entriesView={entriesView}
                   filterClient={filterClient}
                   setEntriesView={setEntriesView} setFilterClient={setFilterClient}
                   setCalMonth={setCalMonth} onEdit={startEdit}
