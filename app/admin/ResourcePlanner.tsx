@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback, Fragment } from "react";
+import { createPortal } from "react-dom";
 import { createClient } from "@/lib/supabase";
 import { NavArrow } from "@/components/MonthNav";
 import { localDateKey, isBankHoliday, targetHours } from "@/lib/dateUtils";
@@ -44,7 +45,7 @@ export default function ResourcePlanner({ mode = "admin", selfUserId, selfName }
 
   const [view, setView] = useState<View>("board");
   const [weekStart, setWeekStart] = useState(0);   // week index of the first shown week
-  const [weeksShown, setWeeksShown] = useState(isSelf ? 2 : 1); // 1, 2 or 4
+  const [weeksShown, setWeeksShown] = useState(4); // 1, 2 or 4 — opens on 4 weeks at a glance
   const [projects, setProjects] = useState<PlannerProject[]>([]);
   const [entries, setEntries] = useState<PlannerEntry[]>([]);
   const [planners, setPlanners] = useState<Planner[]>([]);
@@ -212,7 +213,9 @@ export default function ResourcePlanner({ mode = "admin", selfUserId, selfName }
 
   return (
     <section className={isSelf ? "space-y-4" : "animate-fade-up space-y-6"}>
-      {toast && <div className="animate-fade-in fixed top-6 right-6 z-50 bg-accent text-white text-sm px-4 py-2.5 rounded-xl shadow-xl">✓ {toast}</div>}
+      {toast && typeof document !== "undefined" && createPortal(
+        <div className="animate-fade-in fixed top-6 right-6 z-[60] bg-accent text-white text-sm px-4 py-2.5 rounded-xl shadow-xl">✓ {toast}</div>,
+        document.body)}
 
       {!isSelf && (
         <div className="flex items-end justify-between flex-wrap gap-4">
@@ -504,15 +507,18 @@ export default function ResourcePlanner({ mode = "admin", selfUserId, selfName }
         </div>
       )}
 
-      {/* ── Cell editor modal ── */}
-      {editing && (() => {
+      {/* ── Cell editor modal ──
+          Rendered straight into <body> so it always opens in the middle of the screen,
+          however far down the board you've scrolled. (Inside the page it was centred on
+          the whole board, which on the 4-week view put it off the top of the screen.) */}
+      {editing && typeof document !== "undefined" && createPortal((() => {
         const person = planners.find(p => p.id === editing.userId);
         const date = new Date(editing.date + "T12:00:00");
         const ce = cellEntries(editing.userId, editing.date);
         const recentItems = recentIds.map(id => projects.find(p => p.id === id)).filter(Boolean) as PlannerProject[];
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-ink/20 backdrop-blur-sm" onClick={() => setEditing(null)}>
-            <div className="bg-card border border-border rounded-2xl p-6 shadow-xl w-full max-w-md animate-fade-up" onClick={e => e.stopPropagation()}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/20 backdrop-blur-sm" onClick={() => setEditing(null)}>
+            <div className="bg-card border border-border rounded-2xl p-6 shadow-xl w-full max-w-md max-h-[calc(100vh-2rem)] overflow-y-auto animate-fade-up" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h2 className="font-display text-lg font-medium text-ink">{person?.display_name || "Planner"}</h2>
@@ -581,7 +587,7 @@ export default function ResourcePlanner({ mode = "admin", selfUserId, selfName }
             </div>
           </div>
         );
-      })()}
+      })(), document.body)}
     </section>
   );
 }
