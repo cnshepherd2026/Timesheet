@@ -85,8 +85,13 @@ export default function AdminPage() {
     setInactiveThreshold(next);
     try { localStorage.setItem("jym-inactive-threshold", String(next)); } catch {}
   }
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviting, setInviting] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+  const [newName, setNewName] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState("");
+  const [addedDetails, setAddedDetails] = useState<{ name: string; email: string; password: string; warning?: string } | null>(null);
+  const [copied, setCopied] = useState(false);
   const [confirmDeleteUser, setConfirmDeleteUser] = useState<Profile | null>(null);
 
   const dragItem = useRef<number | null>(null);
@@ -181,20 +186,38 @@ export default function AdminPage() {
     fetchAll();
   }
 
-  async function handleInviteUser(e: React.FormEvent) {
+  // Makes an easy-to-read temporary password, e.g. "k7mp-q4tx-9wre"
+  function suggestPassword() {
+    const chars = "abcdefghjkmnpqrstuvwxyz23456789";
+    const bytes = new Uint8Array(12);
+    crypto.getRandomValues(bytes);
+    const s = Array.from(bytes, b => chars[b % chars.length]).join("");
+    setNewPassword(`${s.slice(0, 4)}-${s.slice(4, 8)}-${s.slice(8, 12)}`);
+  }
+
+  async function handleAddStarter(e: React.FormEvent) {
     e.preventDefault();
-    if (!inviteEmail.trim()) return;
-    setInviting(true);
+    setAddError("");
+    if (!newEmail.trim()) return;
+    if (newPassword.length < 8) { setAddError("Temporary password must be at least 8 characters."); return; }
+    setAdding(true);
     const res = await fetch("/api/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: inviteEmail.trim() }),
+      body: JSON.stringify({ email: newEmail.trim(), name: newName.trim(), password: newPassword }),
     });
-    const data = await res.json();
-    if (!res.ok) { setSuccess("Error: " + data.error); }
-    else { setSuccess("Invite sent to " + inviteEmail); setInviteEmail(""); await fetchAll(); }
-    setInviting(false);
-    setTimeout(() => setSuccess(""), 4000);
+    const data = await res.json().catch(() => ({ error: "Something went wrong" }));
+    setAdding(false);
+    if (!res.ok) { setAddError(data.error || "Could not add this person."); return; }
+    setAddedDetails({ name: newName.trim(), email: newEmail.trim().toLowerCase(), password: newPassword, warning: data.warning });
+    setNewEmail(""); setNewName(""); setNewPassword(""); setCopied(false);
+    await fetchAll();
+  }
+
+  async function copyLoginDetails() {
+    if (!addedDetails) return;
+    const text = `Timesheet login\nWebsite: ${window.location.origin}\nEmail: ${addedDetails.email}\nTemporary password: ${addedDetails.password}`;
+    try { await navigator.clipboard.writeText(text); setCopied(true); } catch { setCopied(false); }
   }
 
   async function handleDeleteUser(userId: string) {
@@ -821,21 +844,59 @@ export default function AdminPage() {
         <section className="space-y-6 animate-fade-up">
           <div>
             <h1 className="font-display text-4xl font-bold text-ink">Manage People</h1>
-            <p className="text-sm text-muted mt-1">Invite team members, set display names, and manage admin access.</p>
+            <p className="text-sm text-muted mt-1">Add team members, set display names, and manage admin access.</p>
           </div>
 
-          {/* Invite user */}
+          {/* Add new starter */}
           <div className="bg-card border border-border rounded-2xl p-7">
-            <h3 className="font-display text-xs font-bold uppercase tracking-widest text-muted mb-5">Invite new user</h3>
-            <form onSubmit={handleInviteUser} className="flex gap-3">
-              <input type="email" required value={inviteEmail} onChange={e => setInviteEmail(e.target.value)}
-                placeholder="colleague@email.com"
-                className="flex-1 px-4 py-3 rounded-xl border border-border bg-paper text-ink placeholder-muted/50 text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"/>
-              <button type="submit" disabled={inviting}
-                className="px-6 py-3 bg-ink text-paper font-display font-semibold text-sm rounded-xl hover:bg-ink/90 active:scale-95 transition-all disabled:opacity-50 whitespace-nowrap">
-                {inviting ? "Sending…" : "Send invite"}
-              </button>
+            <h3 className="font-display text-xs font-bold uppercase tracking-widest text-muted mb-1">Add new starter</h3>
+            <p className="text-xs text-muted mb-5">Creates their login straight away. No email is sent — give them the details yourself.</p>
+            <form onSubmit={handleAddStarter} className="grid gap-3 sm:grid-cols-2">
+              <input type="email" required value={newEmail} onChange={e => setNewEmail(e.target.value)}
+                placeholder="Email, e.g. name@jympartnership.co.uk" autoComplete="off"
+                className="px-4 py-3 rounded-xl border border-border bg-paper text-ink placeholder-muted/50 text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"/>
+              <input type="text" value={newName} onChange={e => setNewName(e.target.value)}
+                placeholder="Display name, e.g. Sam Glossop" autoComplete="off"
+                className="px-4 py-3 rounded-xl border border-border bg-paper text-ink placeholder-muted/50 text-sm font-body focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"/>
+              <div className="flex gap-2 sm:col-span-2">
+                <input type="text" required minLength={8} value={newPassword} onChange={e => setNewPassword(e.target.value)}
+                  placeholder="Temporary password (8+ characters)" autoComplete="new-password"
+                  className="flex-1 min-w-0 px-4 py-3 rounded-xl border border-border bg-paper text-ink placeholder-muted/50 text-sm font-mono focus:outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"/>
+                <button type="button" onClick={suggestPassword}
+                  className="px-4 py-3 border border-border text-ink font-display font-semibold text-sm rounded-xl hover:bg-paper transition-all whitespace-nowrap">
+                  Suggest
+                </button>
+                <button type="submit" disabled={adding}
+                  className="px-6 py-3 bg-ink text-paper font-display font-semibold text-sm rounded-xl hover:bg-ink/90 active:scale-95 transition-all disabled:opacity-50 whitespace-nowrap">
+                  {adding ? "Adding…" : "Add starter"}
+                </button>
+              </div>
             </form>
+            {addError && <p className="mt-3 text-sm text-accent">{addError}</p>}
+
+            {/* Login details to pass on — stays until dismissed */}
+            {addedDetails && (
+              <div className="mt-5 rounded-xl border border-accent/40 bg-accent/5 p-5">
+                <p className="text-sm font-semibold text-ink mb-3">
+                  {addedDetails.name || addedDetails.email} has been added. Give them these details:
+                </p>
+                <div className="space-y-1 text-sm font-mono text-ink">
+                  <p>Email: {addedDetails.email}</p>
+                  <p>Temporary password: {addedDetails.password}</p>
+                </div>
+                {addedDetails.warning && <p className="mt-3 text-xs text-accent">{addedDetails.warning}</p>}
+                <div className="mt-4 flex gap-2">
+                  <button type="button" onClick={copyLoginDetails}
+                    className="text-xs font-mono px-3 py-2 bg-ink text-paper rounded-lg hover:bg-ink/90 transition-all">
+                    {copied ? "Copied ✓" : "Copy details"}
+                  </button>
+                  <button type="button" onClick={() => { setAddedDetails(null); setCopied(false); }}
+                    className="text-xs font-mono px-3 py-2 border border-border text-ink rounded-lg hover:bg-paper transition-all">
+                    Done
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
           {profiles.length === 0 ? (
             <div className="bg-card border border-border rounded-2xl p-10 text-center">

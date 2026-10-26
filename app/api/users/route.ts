@@ -42,24 +42,44 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ users });
 }
 
-// POST — invite a new user
+// POST — add a new starter with a temporary password (no email is sent)
 export async function POST(req: NextRequest) {
   const session = await checkAdmin(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { email } = await req.json();
+  const body = await req.json();
+  const email = String(body.email || "").trim().toLowerCase();
+  const name = String(body.name || "").trim();
+  const password = String(body.password || "");
+
   if (!email) return NextResponse.json({ error: "Email required" }, { status: 400 });
+  if (password.length < 8) {
+    return NextResponse.json({ error: "Temporary password must be at least 8 characters" }, { status: 400 });
+  }
 
   const admin = getAdminClient();
-  const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/confirm`,
+  const { data, error } = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true, // account is ready to use straight away
   });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error || !data?.user) {
+    const message = error && /already/i.test(error.message)
+      ? "That email already has an account"
+      : error?.message || "Could not create the account";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
 
-  // Create profile row immediately
-  await admin.from("profiles").upsert({ id: data.user.id }, { onConflict: "id", ignoreDuplicates: true });
+  // Create profile row with their display name
+  const { error: profileError } = await admin
+    .from("profiles")
+    .upsert({ id: data.user.id, display_name: name || null }, { onConflict: "id" });
 
-  return NextResponse.json({ success: true, user: { id: data.user.id, email: data.user.email } });
+  return NextResponse.json({
+    success: true,
+    user: { id: data.user.id, email: data.user.email },
+    warning: profileError ? "Account created, but the name didn't save — set it in the list below." : undefined,
+  });
 }
 
 // DELETE — remove a user
